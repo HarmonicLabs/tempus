@@ -275,12 +275,13 @@ const validator = pfn([
                     2: leading_zeros: int,
                     3: difficulty_number: int,
                     4: epoch_time: int,
-                    current_posix_time: int,
-                    extra: data,
-                    interlink: list( data )
+                    5: current_posix_time: int,
+                    6: extra: data,
+                    7: interlink: list( data )
                 }
                 */
-                const target = plet(
+               // inlined
+                const target_state = // plet(
                     TargetState.TargetState({
                         nonce: rdmr.raw.fields.head,
                         epoch_time: accessConstIdx( state.raw.fields, 4 ),
@@ -289,13 +290,13 @@ const validator = pfn([
                         leading_zeros: accessConstIdx( state.raw.fields, 2 ),
                         difficulty_number: accessConstIdx( state.raw.fields, 3 ),
                     })
-                );
+                // );
 
                 const found_bytearray = plet(
                     psha2_256.$(
                         psha2_256.$(
                             pserialiseData.$(
-                                punsafeConvertType( target, data )
+                                punsafeConvertType( target_state, data )
                             )
                         ) 
                     )

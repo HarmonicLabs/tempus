@@ -1,4 +1,4 @@
-import { Machine, data, pBSToData, pByteString, pInt, pList, plet, pnilData, prettyIR, prettyUPLC } from "@harmoniclabs/plu-ts";
+import { Data, DataB, Machine, UPLCConst, constT, data, pBSToData, pByteString, pInt, pList, plet, pnilData, prettyIR, prettyUPLC } from "@harmoniclabs/plu-ts";
 import { calculate_interlink, exp2, format_found_bytearray, get_difficulty_adjustment, get_new_difficulty, pListPairInt } from "../tempus";
 import { fromHex } from "@harmoniclabs/uint8array-utils";
 
@@ -126,7 +126,8 @@ describe("tempus", () => {
 
         test("interlink test 1", () => {
 
-            const currHash = fromHex("0000000000000000009c40000000000012000000000000000000000000000000");
+            const currHashHex = "0000000000000000009c40000000000012000000000000000000000000000000";
+            const currHash = fromHex( currHashHex );
 
             const curr_hash_bs = pByteString( currHash );
 
@@ -137,88 +138,194 @@ describe("tempus", () => {
 
             const current_hash = pBSToData.$( curr_hash_bs );
 
-            console.log(
-                Machine.eval(
-                    calculate_interlink
-                    .$( pnilData )
-                    .$( current_hash )
-                    .$( found_leading_zeros )
-                    .$( found_difficulty_num )
-                    .$( 40000 )
-                    .$( 5 )
-                )
-            )
+            const result = Machine.evalSimple(
+                calculate_interlink
+                .$( pnilData )
+                .$( current_hash )
+                .$( found_leading_zeros )
+                .$( found_difficulty_num )
+                .$( 40000 )
+                .$( 5 )
+            ) as UPLCConst;
 
-            /*
+            expect( result instanceof UPLCConst ).toBe( true );
+            expect( result.type ).toEqual( constT.listOf( constT.data ) );
+
+            const val = result.value as DataB[];
+
+            expect( val.every( v => v instanceof DataB ) ).toBe( true );
+
+            const expectedLen = 51;
+            
+            expect( val.length ).toEqual( expectedLen );
+
+            const interlink_strs = val.map( v => v.bytes.toString() );
+
+            //*
             expect(
-                Machine.evalSimple(
-                    calculate_interlink
-                    .$( pnilData )
-                    .$( current_hash )
-                    .$( found_leading_zeros )
-                    .$( found_difficulty_num )
-                    .$( 40000 )
-                    .$( 5 )
-                )
+                interlink_strs
             ).toEqual(
-                Machine.evalSimple(
-                    pList( data )([
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                        current_hash,
-                      ])
+                new Array( expectedLen ).fill( currHashHex )
+            );
+            //*/
+
+        });
+
+        test("interlink test 2", () => {
+
+            const currHashHex = "0000000000000000000000000000000101000000000123000000000000000000";
+            const currHash = fromHex( currHashHex );
+
+            const curr_hash_bs = pByteString( currHash );
+
+            const formatted = plet( format_found_bytearray.$( curr_hash_bs ) );
+
+            const found_difficulty_num = formatted.head;
+            const found_leading_zeros= formatted.tail.head;
+
+            const current_hash = pBSToData.$( curr_hash_bs );
+
+            const result = Machine.evalSimple(
+                calculate_interlink
+                .$( pnilData )
+                .$( current_hash )
+                .$( found_leading_zeros )
+                .$( found_difficulty_num )
+                .$( 40000 )
+                .$( 5 )
+            ) as UPLCConst;
+
+            expect( result instanceof UPLCConst ).toBe( true );
+            expect( result.type ).toEqual( constT.listOf( constT.data ) );
+
+            const val = result.value as DataB[];
+
+            expect( val.every( v => v instanceof DataB ) ).toBe( true );
+
+            const expectedLen = 107;
+            
+            expect( val.length ).toEqual( expectedLen );
+
+            const interlink_strs = val.map( v => v.bytes.toString() );
+
+            //*
+            expect(
+                interlink_strs
+            ).toEqual(
+                new Array( expectedLen ).fill( currHashHex )
+            );
+            //*/
+
+        });
+
+        test("interlink test 3", () => {
+
+            const prevHashHex = "0000000000000000009c40000000000000000000000000000000000000000000";
+            const currHashHex = "0000000000000000000000000000000101000000000000000000000000000000";
+            
+            const prevHash = fromHex( prevHashHex );
+            const currHash = fromHex( currHashHex );
+
+            const curr_hash_bs = pByteString( currHash );
+
+            const formatted = plet( format_found_bytearray.$( curr_hash_bs ) );
+
+            const found_difficulty_num = formatted.head;
+            const found_leading_zeros= formatted.tail.head;
+
+            const current_hash = pBSToData.$( curr_hash_bs );
+            const prev_hash = pBSToData.$( pByteString( prevHash ) );
+
+            const result = Machine.evalSimple(
+                calculate_interlink
+                .$( pList( data )( new Array( 6 ).fill( prev_hash ) ))
+                .$( current_hash )
+                .$( found_leading_zeros )
+                .$( found_difficulty_num )
+                .$( 40000 )
+                .$( 5 )
+            ) as UPLCConst;
+
+            expect( result instanceof UPLCConst ).toBe( true );
+            expect( result.type ).toEqual( constT.listOf( constT.data ) );
+
+            const val = result.value as DataB[];
+
+            expect( val.every( v => v instanceof DataB ) ).toBe( true );
+
+            const expectedLen = 107;
+            
+            expect( val.length ).toEqual( expectedLen );
+
+            const interlink_strs = val.map( v => v.bytes.toString() );
+
+            //*
+            expect(
+                interlink_strs
+            ).toEqual(
+                new Array( expectedLen ).fill( currHashHex )
+            );
+            //*/
+
+        });
+
+        test("interlink test 4", () => {
+
+            const prevHashHex = "0000000000000000000000000000000101000000000000000000000000000000";
+            const currHashHex = "0000000000000000009c40000000000000000000000000000000000000000000";
+            
+            const prevHash = fromHex( prevHashHex );
+            const currHash = fromHex( currHashHex );
+
+            const curr_hash_bs = pByteString( currHash );
+
+            const formatted = plet( format_found_bytearray.$( curr_hash_bs ) );
+
+            const found_difficulty_num = formatted.head;
+            const found_leading_zeros= formatted.tail.head;
+
+            const current_hash = pBSToData.$( curr_hash_bs );
+            const prev_hash = pBSToData.$( pByteString( prevHash ) );
+
+            const { result, logs } = Machine.eval(
+                calculate_interlink
+                .$( pList( data )( new Array( 103 ).fill( prev_hash ) ))
+                .$( current_hash )
+                .$( found_leading_zeros )
+                .$( found_difficulty_num )
+                .$( 40000 )
+                .$( 5 )
+            ) as { result: UPLCConst, logs: string[] };
+
+            console.log( logs );
+            
+            expect( result instanceof UPLCConst ).toBe( true );
+            expect( result.type ).toEqual( constT.listOf( constT.data ) );
+
+            const val = result.value as DataB[];
+
+            expect( val.every( v => v instanceof DataB ) ).toBe( true );
+
+            const expectedCurrentLen = 51;
+            const expectedPrevLen = 52;
+            const expectedLen = expectedCurrentLen + expectedPrevLen;
+            
+            // expect( val.length ).toEqual( expectedLen );
+
+            const interlink_strs = val.map( v => v.bytes.toString() );
+
+            //*
+            expect(
+                interlink_strs
+            ).toEqual(
+                new Array( expectedCurrentLen ).fill( currHashHex )
+                .concat(
+                    new Array( expectedPrevLen ).fill( prevHashHex )
                 )
             );
             //*/
 
-        })
+        });
+
     })
-})
+});

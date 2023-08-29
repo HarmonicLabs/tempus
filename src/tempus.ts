@@ -1,4 +1,4 @@
-import { PCurrencySymbol, PInt, PTokenName, PValue, PValueEntry, Term, TermList, bool, data, fn, int, lam, list, pInt, pList, pfn, phoist, pif, pisEmpty, plam, plet, pnilData, precursive, bs, pstrictIf, pmatchList, pdelay } from "@harmoniclabs/plu-ts";
+import { PCurrencySymbol, PInt, PTokenName, PValue, PValueEntry, Term, TermList, bool, data, fn, int, lam, list, pInt, pList, pfn, phoist, pif, pisEmpty, plam, plet, pnilData, precursive, bs, pstrictIf, pmatchList, pdelay, pchooseList, pstrictChooseList, pforce, delayed } from "@harmoniclabs/plu-ts";
 import { fromAscii } from "@harmoniclabs/uint8array-utils";
 
 export const master_tn = PTokenName.from( fromAscii("THE tempura") );
@@ -402,15 +402,20 @@ export const calculate_interlink = phoist(
             .then(
                 calculate_interlink
                 .$(
-                    pmatchList( list( data ), data )
-                    .$( pdelay( pnilData ) )
-                    .$( ( _, rest ) => 
-                        pmatchList( list( data ), data )
-                        .$( pdelay( pnilData ) )
-                        .$( ( _, rest ) => rest )
-                        .$( rest )
-                    )
+                    pchooseList( data , list( data ) )
                     .$( interlink )
+                    // [] ->
+                    .$( pnilData )
+                    .$( 
+                        plet( interlink.tail ).in( rest => 
+                            pchooseList( data , list( data ) )
+                            .$( rest )
+                            // [_] ->
+                            .$( pnilData )
+                            // [_, _, ..rest] ->
+                            .$( rest.tail )
+                        )
+                    )
                 )
                 .$( curr_hash )
                 .$( found_leading_zeros )
@@ -431,8 +436,8 @@ export const calculate_interlink = phoist(
                 .$( curr_hash )
                 .$( found_leading_zeros )
                 .$( found_difficulty_num )
-                .$( quarter_diff )
-                .$( quarter_leading_zeros )
+                .$( difficulty_num )
+                .$( leading_zeroes )
             );
         })
     )
