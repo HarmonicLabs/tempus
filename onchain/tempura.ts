@@ -1,4 +1,4 @@
-import { PAssetsEntry, PCredential, PData, PScriptContext, PScriptPurpose, PTxInfo, PTxOut, PTxOutRef, Term, TermList, bool, bs, data, int, list, pBSToData, pDataI, pDataList, pIntToData, pListToData, palias, peqData, perror, pfn, phoist, pif, pisEmpty, plam, plet, pmakeUnit, pmatch, pnilData, pserialiseData, psha2_256, pstruct, punBData, punsafeConvertType, unit } from "@harmoniclabs/plu-ts";
+import { PAssetsEntry, PCredential, PData, PScriptContext, PScriptPurpose, PTxInfo, PTxOut, PTxOutRef, PUnit, Term, TermFn, TermList, bool, bs, data, int, list, pBSToData, pDataI, pDataList, pIntToData, pListToData, palias, peqData, perror, pfn, phoist, pif, pisEmpty, plam, plet, pmakeUnit, pmatch, pnilData, pserialiseData, psha2_256, pstruct, psub, punBData, punsafeConvertType, unit } from "@harmoniclabs/plu-ts";
 import { epoch_number, exp2, format_found_bytearray, get_new_difficulty, get_difficulty_adjustment, halving_number, initial_payout, master_tn, tn, value_contains_master, value_has_only_master_and_lovelaces, calculate_interlink } from "./tempus";
 
 
@@ -64,7 +64,15 @@ function accessConstIdx( term: TermList<PData>, idx: number ): Term<PData>
     return term.head;
 }
 
-const validator = pfn([
+export const tempura
+    // typescript wants us to specify the type if we export
+    // this has no effect on the contract
+    : TermFn<[
+        typeof PTxOutRef,
+        PData,
+        typeof Redeemer
+    ], PUnit>
+= pfn([
     PTxOutRef.type,
     data,
     Redeemer.type
@@ -100,7 +108,9 @@ const validator = pfn([
             );
 
             const time_diff = plet(
-                upper_range.sub( lower_range )
+                psub
+                .$( upper_range )
+                .$( lower_range )
             );
 
             // inlined
@@ -156,7 +166,7 @@ const validator = pfn([
 
             // inlined
             // Mint(5) Genesis requirement: Check initial datum state is set to default
-            const correctInitialState = outState.eq(
+            const correctInitialState = (
                 SpendingState.SpendingState({
                     block_number: pDataI( 0 ),
                     current_hash: pBSToData.$( bootstrap_hash ),
@@ -166,8 +176,8 @@ const validator = pfn([
                     current_posix_time: pIntToData.$( averaged_current_time ),
                     extra: pDataI( 0 ),
                     interlink: pListToData.$( pnilData )
-                })
-            )
+                }).eq( outState )
+            );
 
             return passert.$(
                 // Mint(0) Genesis requirement: Time range span is 3 minutes or less and inclusive
@@ -249,7 +259,7 @@ const validator = pfn([
                 const upper_range = 
                 pmatch( interval.to.bound )
                 .onPFinite(({ _0 }) => _0 )
-                ._ (  _ => perror( int ) )
+                ._( _ => perror( int ) )
 
                 const lower_range = plet(
                     pmatch( interval.from.bound )
@@ -258,7 +268,9 @@ const validator = pfn([
                 );
 
                 const time_diff = plet(
-                    upper_range.sub( lower_range )
+                    psub
+                    .$( upper_range )
+                    .$( lower_range )
                 );
 
                 // inlined
@@ -334,7 +346,7 @@ const validator = pfn([
                 // Spend(4) requirement: Only one type of token minted under the validator policy
                 const singleMintEntry = pisEmpty.$( ownMints.tail );
 
-                const { tokenName: ownMint_tn, quantity: ownMint_qty } = ownMints.head;
+                const { fst: ownMint_tn, snd: ownMint_qty } = ownMints.head;
 
                 const halving_exponent = plet( block_number.div( halving_number ) );
 
@@ -358,10 +370,11 @@ const validator = pfn([
                 // Check for every divisible by 2016 block: 
                 // - Epoch time resets
                 // - leading zeros is adjusted based on percent of hardcoded target time for 2016 blocks vs epoch time
-                const out_datum =
+                const out_datum = plet(
                     pmatch( ownOut.datum )
                     .onInlineDatum(({ datum }) => punsafeConvertType( datum, SpendingState.type) )
-                    ._( _ => perror( SpendingState.type ) );
+                    ._( _ => perror( SpendingState.type ) )
+                );
 
                 // Spend(7) requirement: Expect Output Datum to be of type State
                 // (implicit: fails field extraction if it is not)

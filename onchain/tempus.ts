@@ -1,7 +1,7 @@
 import { PCurrencySymbol, PInt, PTokenName, PValue, PValueEntry, Term, TermList, bool, data, fn, int, lam, list, pInt, pList, pfn, phoist, pif, pisEmpty, plam, plet, pnilData, precursive, bs, pstrictIf, pmatchList, pdelay, pchooseList, pstrictChooseList, pforce, delayed } from "@harmoniclabs/plu-ts";
 import { fromAscii } from "@harmoniclabs/uint8array-utils";
 
-export const master_tn = PTokenName.from( fromAscii("THE tempura") );
+export const master_tn = PTokenName.from( fromAscii("itamae") );
 
 export const tn = PTokenName.from( fromAscii("TEMPURA") );
 
