@@ -122,7 +122,7 @@ describe("tempus", () => {
 
     });
 
-    describe.only("calculate_interlink", () => {
+    describe("calculate_interlink", () => {
 
         test("interlink test 1", () => {
 
@@ -298,7 +298,7 @@ describe("tempus", () => {
             ) as { result: UPLCConst, logs: string[] };
 
             console.log( logs );
-            
+
             expect( result instanceof UPLCConst ).toBe( true );
             expect( result.type ).toEqual( constT.listOf( constT.data ) );
 

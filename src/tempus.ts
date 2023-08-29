@@ -427,12 +427,7 @@ export const calculate_interlink = phoist(
             )
             .else(
                 do_calculate_interlink
-                .$(
-                    pmatchList( list( data ), data )
-                    .$( pdelay( pnilData ) )
-                    .$( ( _, rest ) => rest )
-                    .$( interlink )
-                )
+                .$( interlink )
                 .$( curr_hash )
                 .$( found_leading_zeros )
                 .$( found_difficulty_num )
