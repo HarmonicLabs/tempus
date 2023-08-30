@@ -164,28 +164,12 @@ export const value_contains_master = phoist(
     ],  bool)
     ( ( value, own_policy ) => {
 
-        const checkMasterAssets = plet(
-            plam( PValueEntry.type, bool )
-            (({ policy, assets }) => {
-
-                // inlined
-                const onlySigleAsset = pisEmpty.$( assets.tail );
-
-                const { tokenName, quantity } = assets.head;
-
-                return onlySigleAsset
-                .and(  policy.eq( own_policy ) )
-                .and(  tokenName.eq( master_tn ) )
-                .and(  quantity.eq(1) );
-            })
-        );
-
-        return value.some(({ policy, assets }) => {
+        return value.some(({ fst: policy, snd: assets }) => {
 
             // inlined
             const singleAssetEntry = pisEmpty.$( assets.tail );
 
-            const { tokenName, quantity } = assets.head;
+            const { fst: tokenName, snd: quantity } = assets.head;
 
             return policy.eq( own_policy )
             .and( singleAssetEntry )

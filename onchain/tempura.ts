@@ -1,4 +1,4 @@
-import { PAssetsEntry, PCredential, PData, PScriptContext, PScriptPurpose, PTxInfo, PTxOut, PTxOutRef, PUnit, Term, TermFn, TermList, bool, bs, data, int, list, pBSToData, pDataI, pDataList, pIntToData, pListToData, palias, peqData, perror, pfn, phoist, pif, pisEmpty, plam, plet, pmakeUnit, pmatch, pnilData, pserialiseData, psha2_256, pstruct, psub, punBData, punsafeConvertType, unit } from "@harmoniclabs/plu-ts";
+import { PAssetsEntry, PCredential, PData, PScriptContext, PScriptPurpose, PTxInfo, PTxOut, PTxOutRef, PUnit, Term, TermFn, TermList, bool, bs, data, int, list, pBSToData, pDataI, pDataList, pIntToData, pListToData, pStr, palias, pdelay, peqData, perror, pfn, phoist, pif, pisEmpty, plam, plet, pmakeUnit, pmatch, pnilData, pserialiseData, psha2_256, pstruct, psub, ptrace, ptraceError, ptraceIfFalse, ptraceVal, punBData, punsafeConvertType, str, unit } from "@harmoniclabs/plu-ts";
 import { epoch_number, exp2, format_found_bytearray, get_new_difficulty, get_difficulty_adjustment, halving_number, initial_payout, master_tn, tn, value_contains_master, value_has_only_master_and_lovelaces, calculate_interlink } from "./tempus";
 
 
@@ -50,6 +50,16 @@ const passert = phoist(
         .else( perror( unit ) )
     )
 );
+
+const passertOrTrace = phoist(
+    pfn([ bool, str] , unit )
+    ( (condition, msg) =>
+        pif( unit ).$( condition )
+        .then( pmakeUnit() )
+        .else( ptraceError( unit ).$( msg ) )
+    )
+);
+
 
 function accessConstIdx( term: TermList<PData>, idx: number ): Term<PData>
 {
@@ -156,7 +166,7 @@ export const tempura
 
             // inlined
             // Mint(4) Genesis requirement: Master token goes to only script output
-            const outToSelfHasMaster = value_has_only_master_and_lovelaces.$( outToSelf.value ).$( own_policy );
+            const outToSelfHasMaster = value_contains_master.$( outToSelf.value ).$( own_policy );
 
             // inlined
             const outState =

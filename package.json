@@ -1,5 +1,5 @@
 {
-    "name": "fortuna-pluts",
+    "name": "tempus-pluts",
     "version": "0.0.0",
     "description": "",
     "main": "./dist/index.js",
@@ -15,8 +15,8 @@
         "buidl": "npm run build",
         "ci": "npm run test && npm run build",
         "start": "npm run build && node dist/miner/index.js mine",
-        "_test": "npm run build && node dist/scripts/_test.js",
-        "genesis": "npm run build && node dist/scripts/genesis.js"
+        "genesis": "npm run build && node dist/scripts/genesis.js",
+        "mine": "npm run build && node dist/miner/index.js"
     },
     "publishConfig": {
         "registry": "https://registry.npmjs.org"
@@ -50,12 +50,11 @@
     "homepage": "https://github.com/HarmonicLabs/plu-ts#readme",
     "dependencies": {
         "@cardano-ogmios/client": "^5.6.0",
-        "@harmoniclabs/blockfrost-pluts": "^0.1.2",
         "@harmoniclabs/cardanocli-pluts": "^0.1.4-dev1",
         "@harmoniclabs/cbor": "^1.1.2",
         "@harmoniclabs/crypto": "^0.1.0",
         "@harmoniclabs/obj-utils": "^1.0.0",
-        "@harmoniclabs/plu-ts": "^0.5.1",
+        "@harmoniclabs/plu-ts": "^0.5.3",
         "@harmoniclabs/uint8array-utils": "^1.0.0",
         "dotenv": "^16.3.1",
         "ws": "^8.13.0"

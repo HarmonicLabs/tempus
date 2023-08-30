@@ -4,8 +4,8 @@ import { TxOutRef_fromString, withDir } from "./utils";
 import { sha2_256 } from "@harmoniclabs/crypto";
 import { fromAscii, toHex } from "@harmoniclabs/uint8array-utils";
 import { writeFile } from "fs/promises";
-import { BlockfrostPluts } from "@harmoniclabs/blockfrost-pluts";
-import { BLOCKFROST_API_KEY } from "../env";
+import { KupmiosPluts } from "../kupmios-pluts";
+import { KUPO_URL, OGMIOS_URL } from "../env";
 
 const ADA = 1_000_000;
 
@@ -28,20 +28,18 @@ void async function main()
         }
     });
 
-    const blockfrost = new BlockfrostPluts({
-        projectId: BLOCKFROST_API_KEY
-    });
+    const kupmios = new KupmiosPluts( KUPO_URL, OGMIOS_URL );
 
-    const pps = await blockfrost.getProtocolParameters();
+    const pps = await kupmios.getProtocolParameters();
 
     const txBuilder = new TxBuilder(
         pps,
-        await blockfrost.getGenesisInfos()
+        await kupmios.getGenesisInfos()
     );
 
     const utxoRefData = utxoRef.toData();
     
-    const network = process.argv[2] as NetworkT ?? "mainnet";
+    const network = process.argv[2] ?? "mainnet";
 
     const envDir = `./${network}`;
     await withDir( envDir );
@@ -49,6 +47,9 @@ void async function main()
     // const ogmiosWs = new WebSocket( OGMIOS_URL );
     // ogmiosWs.send()
 
+    console.log("compiling contract...");
+    console.time("contract compilation");
+    
     const compiledContract = compile(
         tempura
         .$(
@@ -58,6 +59,8 @@ void async function main()
         )
     );
 
+    console.timeEnd("contract compilation");
+
     const tempuraScript = new Script(
         "PlutusScriptV2",
         compiledContract
@@ -66,7 +69,7 @@ void async function main()
     const tempuraHash = tempuraScript.hash;
 
     const tempuraScriptAddress = new Address(
-        network,
+        network === "mainnet" ? "mainnet" : "testnet",
         PaymentCredentials.script( tempuraHash )
     );
 
@@ -80,10 +83,16 @@ void async function main()
         )
     );
 
-    const now = Date.now() + 1;
-    const in3Mins = now + 180_000 - 2;
+    const now = Date.now() + 60_000;
+    const in3Mins = now + 180_000;
 
-    const avg_time = Math.round( (now + in3Mins) / 2 );
+    const invalidBefore = txBuilder.posixToSlot( now ) + 1;
+    const invalidAfter =  txBuilder.posixToSlot( in3Mins ) - 2;
+
+    const lower_range = txBuilder.slotToPOSIX( invalidBefore );
+    const upper_range = txBuilder.slotToPOSIX( invalidAfter );
+
+    const avg_time = ( upper_range - lower_range ) / 2 + lower_range;
 
     /*
     SpendingState.SpendingState({
@@ -104,6 +113,7 @@ void async function main()
             new DataB( bootstrapHash ),
             new DataI( 5 ),
             new DataI( 65535 ),
+            new DataI( 0 ),
             new DataI( avg_time ),
             new DataI( 0 ),
             new DataList([]),
@@ -111,6 +121,9 @@ void async function main()
     );
 
     const itamae_tn = fromAscii("itamae");
+
+    console.log("creating the transaciton...");
+    console.time("tx creation");
     //*
     const tx = await txBuilder.build({
         inputs: [{ utxo: inputUtxo }],
@@ -125,8 +138,8 @@ void async function main()
                 value: Value.singleAsset( tempuraHash, itamae_tn, 1 )
             }
         ],
-        invalidBefore: now,
-        invalidAfter: in3Mins,
+        invalidBefore,
+        invalidAfter,
         outputs: [
             {
                 address: tempuraScriptAddress,
@@ -140,10 +153,19 @@ void async function main()
         changeAddress 
     });
 
+    console.timeEnd("tx creation");
+
     const txCbor = tx.toCbor().toString();
     const txHash = tx.hash.toString();
 
     console.log( txCbor );
+    console.log(
+        JSON.stringify(
+            tx.toJson(),
+            undefined,
+            4
+        )
+    )
 
     const deployTx = await txBuilder.build({
         inputs: [{
@@ -168,8 +190,15 @@ void async function main()
     });
 
     console.log( "\n\n" + deployTx.toCbor().toString() );
+    console.log(
+        JSON.stringify(
+            deployTx.toJson(),
+            undefined,
+            4
+        )
+    )
 
-    writeTempuraGenesis(
+    await writeTempuraGenesis(
         network,
         compiledContract,
         tempuraHash,
@@ -177,14 +206,16 @@ void async function main()
         bootstrapHash,
         datum,
         utxoRef,
-        new TxOutRef({ id: deployTx.hash, index: 0 }),
+        new TxOutRef({ id: deployTx.hash.toString(), index: 0 }),
         txHash
     );
     //*/
+
+    kupmios.close();
 }()
 
 async function writeTempuraGenesis(
-    network: NetworkT,
+    network: string,
     validator: Uint8Array,
     validatorHash: Hash28,
     validatorAddress: Address,
@@ -197,7 +228,7 @@ async function writeTempuraGenesis(
 {
     await withDir("./tempura-genesis");
     await writeFile(
-        `./tempura-gensis/${network}.json`,
+        `./tempura-genesis/${network}.json`,
         JSON.stringify(
             {
                 validator: toHex( validator ),
@@ -211,6 +242,7 @@ async function writeTempuraGenesis(
             },
             undefined,
             4
-        )
+        ),
+        { encoding: "utf8" }
     );
 }
