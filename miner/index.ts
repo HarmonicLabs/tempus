@@ -1,4 +1,4 @@
-import { Address, AddressStr, Data, DataB, DataConstr, DataI, DataList, Hash28, ITxBuildOutput, PaymentCredentials, PrivateKey, TxBuilder, Value, dataToCbor, eqData, isData } from "@harmoniclabs/plu-ts";
+import { Address, AddressStr, Data, DataB, DataConstr, DataI, DataList, Hash28, ITxBuildOutput, PaymentCredentials, PrivateKey, TxBuilder, UTxO, Value, dataToCbor, eqData, isData } from "@harmoniclabs/plu-ts";
 import { tryGetValidMinerConfig } from "./config";
 import { KupmiosPluts } from "../kupmios-pluts";
 import { readFile } from "fs/promises";
@@ -281,6 +281,14 @@ async function main()
                     ])
                 });
             }
+
+            const minerInput = minerUtxos.shift();
+
+            if( !minerInput )
+            {
+                throw new Error("missing utxos at miner address; could not mint new block");
+            }
+
             const tx = txBuilder.buildSync({
                 inputs: [
                     {
@@ -291,9 +299,9 @@ async function main()
                             redeemer: new DataConstr( 1, [ new DataB( nonce ) ])
                         }
                     },
-                    { utxo: minerUtxos[0] }
+                    { utxo: minerInput }
                 ],
-                collaterals: [ minerUtxos[0] ],
+                collaterals: [ minerInput ],
                 mints: [
                     {
                         value: Value.singleAsset( validatorHash, tokenName, 5_000_000_000 ),
@@ -313,6 +321,20 @@ async function main()
             tx.signWith( minerPrivateKey );
 
             await kupmios.submitTx( tx );
+
+            minerUtxos.push(
+                ...tx.body.outputs
+                .map( (out, i) =>
+                    out.address.toString() === minerAddress.toString() ?
+                    new UTxO({
+                        utxoRef: {
+                            id: tx.hash.toString(),
+                            index: i
+                        },
+                        resolved: out
+                    }) : undefined
+                ).filter( out => out instanceof UTxO ) as UTxO[]
+            );
 
             await kupmios.waitTxConfirmation( tx.hash.toString() );
             timer = -5001; // make sure we reset the validator next cycle
