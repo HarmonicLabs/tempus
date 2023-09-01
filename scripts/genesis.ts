@@ -1,4 +1,4 @@
-import { PTxOutRef, compile, pData, Script, Address, NetworkT, PaymentCredentials, dataToCbor, DataConstr, DataI, DataB, DataList, TxOutRef, Hash28, Data, UTxO, Value, TxBuilder } from "@harmoniclabs/plu-ts";
+import { PTxOutRef, compile, pData, Script, Address, NetworkT, PaymentCredentials, dataToCbor, DataConstr, DataI, DataB, DataList, TxOutRef, Hash28, Data, UTxO, Value, TxBuilder, TxOut } from "@harmoniclabs/plu-ts";
 import { tempura } from "../onchain/tempura";
 import { TxOutRef_fromString, withDir } from "./utils";
 import { sha2_256 } from "@harmoniclabs/crypto";
@@ -6,6 +6,7 @@ import { fromAscii, toHex } from "@harmoniclabs/uint8array-utils";
 import { writeFile } from "fs/promises";
 import { KupmiosPluts } from "../kupmios-pluts";
 import { tryGetValidMinerConfig } from "../miner/config";
+import { BlockfrostPluts } from "@harmoniclabs/blockfrost-pluts";
 
 const ADA = 1_000_000;
 
@@ -20,22 +21,20 @@ void async function main()
     // please change this before running
     const changeAddress = "addr_test1qqgdj25j6pj6ac8pe5khv7l6ge337mmm5eyauaj0nq8skdmxqj6zqxuv7k6lu4m8ll4c9zatlxmr2a9wyluhqkz6grhq84r806"
 
-    const inputUtxo = new UTxO({
-        utxoRef,
-        // please change this before running
-        resolved: {
-            address: changeAddress,
-            value: Value.lovelaces( 10_000 * ADA )
-        }
+    const kupmios = new KupmiosPluts( cfg.kupo_url, "" /* cfg.ogmios_url */ );
+    process.on("beforeExit", () => kupmios.close() );
+
+    const blockfrost = new BlockfrostPluts({
+        projectId: cfg.blockfrost_api_key
     });
 
-    const kupmios = new KupmiosPluts( cfg.kupo_url, cfg.ogmios_url );
+    const inputUtxo = await blockfrost.resolveUtxos([ utxoRef ]).then(([ u ]) => u);
 
-    const pps = await kupmios.getProtocolParameters();
+    const pps = await blockfrost.getProtocolParameters();
 
     const txBuilder = new TxBuilder(
         pps,
-        await kupmios.getGenesisInfos()
+        await blockfrost.getGenesisInfos()
     );
 
     const utxoRefData = utxoRef.toData();
@@ -123,6 +122,17 @@ void async function main()
 
     const itamae_tn = fromAscii("itamae");
 
+    const minOutAda = BigInt(pps.utxoCostPerByte) * BigInt(
+        new TxOut({
+            address: tempuraScriptAddress,
+            value: new Value([
+                Value.lovelaceEntry( 1024 * ADA ),
+                Value.singleAssetEntry( tempuraHash, itamae_tn, 1 )
+            ]),
+            datum
+        }).toCbor().toBuffer().length
+    );
+
     console.log("creating the transaciton...");
     console.time("tx creation");
     //*
@@ -145,7 +155,7 @@ void async function main()
             {
                 address: tempuraScriptAddress,
                 value: new Value([
-                    Value.lovelaceEntry( 2 * ADA ),
+                    Value.lovelaceEntry( minOutAda ),
                     Value.singleAssetEntry( tempuraHash, itamae_tn, 1 )
                 ]),
                 datum
@@ -160,13 +170,6 @@ void async function main()
     const txHash = tx.hash.toString();
 
     console.log( txCbor );
-    console.log(
-        JSON.stringify(
-            tx.toJson(),
-            undefined,
-            4
-        )
-    )
 
     const deployTx = await txBuilder.build({
         inputs: [{
@@ -191,13 +194,6 @@ void async function main()
     });
 
     console.log( "\n\n" + deployTx.toCbor().toString() );
-    console.log(
-        JSON.stringify(
-            deployTx.toJson(),
-            undefined,
-            4
-        )
-    )
 
     await writeTempuraGenesis(
         network,

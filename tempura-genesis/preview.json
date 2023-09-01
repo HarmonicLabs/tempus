@@ -3,14 +3,14 @@
     "validatorHash": "a59063cfde0089836d078f56cb70ebae09fd55352d7e1b322579313a",
     "validatorAddress": "addr_test1wzjeqc70mcqgnqmdq784djmsawhqnl24x5khuxejy4unzwsqeheyh",
     "bootstrapHash": "0feeb72c694458c64ec252112db2236acc0d1a8fde7d6bf90bbeffa69e3893d7",
-    "datum": "d8799f0058200feeb72c694458c64ec252112db2236acc0d1a8fde7d6bf90bbeffa69e3893d70519ffff001b0000018a4816d11c0080ff",
-    "txHash": "dc3f11798308c39fdf95d88021be8b3168417f28915473553b98d4b9ee998d44",
+    "datum": "d8799f0058200feeb72c694458c64ec252112db2236acc0d1a8fde7d6bf90bbeffa69e3893d70519ffff001b0000018a51abc6240080ff",
+    "txHash": "0c9b2ae0506a924dbac276cc0a4373d561964acf13624a97af36467839ef7246",
     "utxoRef": {
         "id": "8df5ef483fb517c8531bae31eed4368af174938a0b6b51ac5b22a6bcc74089b2",
         "index": 0
     },
     "deployedRefScript": {
-        "id": "d23f5a729358014d7ef27f913b6a2c7b3fe8254b23d07d878a295344cd1d47df",
+        "id": "ef127b080c6f2bfce56ee50dd16f8b3f2d15359c2dca6acc8180bbe1533bd151",
         "index": 0
     }
 }

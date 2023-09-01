@@ -50,7 +50,7 @@ async function main()
 
     const changeAddressIsMiner = changeAddress.toString() === minerAddress.toString();
 
-    const kupmios = new KupmiosPluts( cfg.kupo_url, cfg.ogmios_url );
+    const kupmios = new KupmiosPluts( cfg.kupo_url, "" /* cfg.ogmios_url */ );
     process.once( "beforeExit", () => kupmios.close() );
 
     const blockfrost = new BlockfrostPluts({
