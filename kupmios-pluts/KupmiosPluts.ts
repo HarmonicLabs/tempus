@@ -10,6 +10,13 @@ export class KupmiosPluts
     readonly ogmiosWs!: WebSocket;
     readonly isOgmiosWsReady: boolean
 
+    close(): void
+    {
+        if( !this.isOgmiosWsReady ) return;
+        
+        this.ogmiosWs.close();
+    }
+
     constructor( kupoUrl: string, ogmiosUrl: string )
     {
         this.kupoUrl = kupoUrl;
@@ -39,14 +46,7 @@ export class KupmiosPluts
                 enumerable: true,
                 configurable: false
             }
-        );   
-    }
-
-    close(): void
-    {
-        if( !this.isOgmiosWsReady ) return;
-        
-        this.ogmiosWs.close();
+        );
     }
 
     async submitTx( tx: Tx ): Promise<Hash32>

@@ -52,18 +52,18 @@ async function main()
     const kupmios = new KupmiosPluts( cfg.kupo_url, cfg.ogmios_url );
     process.once( "beforeExit", () => kupmios.close() );
 
-    let minerUtxos = await kupmios.getUtxosAt( minerAddress );
-
-    const genesis = JSON.parse(
+    const genesis: GenesisFile = JSON.parse(
         await readFile(
             `./tempura-genesis/${cfg.network}.json`,
             { encoding: "utf-8" }
         )
-    ) as GenesisFile;
+    );
 
     const validatorHash = new Hash28( genesis.validatorHash );
     const tokenName = fromAscii("TEMPURA");
     const validatorAddress = Address.fromString( genesis.validatorAddress );
+
+    const minerUtxos = await kupmios.getUtxosAt( minerAddress );
 
     const deployedScriptRefUtxo = await kupmios.resolveUtxo( genesis.deployedRefScript );
 
