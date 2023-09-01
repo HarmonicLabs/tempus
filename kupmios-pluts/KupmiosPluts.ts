@@ -14,19 +14,24 @@ export class KupmiosPluts
     {
         this.kupoUrl = kupoUrl;
         this.ogmiosUrl = ogmiosUrl;
+        let _ogmiosWs: WebSocket | undefined = undefined;
+        let _isOgmiosReady = false;
+
         Object.defineProperty(
             this, "ogmiosWs", {
-                value: new WebSocket( this.ogmiosUrl ),
-                writable: false,
+                get: () => {
+                    if(!( _ogmiosWs instanceof WebSocket ))
+                    {
+                        _ogmiosWs = new WebSocket( this.ogmiosUrl );
+                        _ogmiosWs.addEventListener("open", () => { _isOgmiosReady = true }, { once: true });
+                    }
+                    return _ogmiosWs;
+                },
+                set: () => {},
                 enumerable: true,
                 configurable: false
             }
         );
-
-        let _isOgmiosReady = false;
-        
-        this.ogmiosWs.addEventListener("open", () => { _isOgmiosReady = true }, { once: true });
-        
         Object.defineProperty(
             this, "isOgmiosWsReady", {
                 get: () => _isOgmiosReady,
@@ -39,6 +44,8 @@ export class KupmiosPluts
 
     close(): void
     {
+        if( !this.isOgmiosWsReady ) return;
+        
         this.ogmiosWs.close();
     }
 

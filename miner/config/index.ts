@@ -116,7 +116,10 @@ export async function tryGetValidMinerConfig( path?: string ): Promise<Validated
     const cfg = await parseMinerConfig( path );
     
     if( !isValidMinerConfig( cfg ) )
-    throw new Error("invalid miner configuration");
+    {
+        console.log( cfg );
+        throw new Error("invalid miner configuration");
+    }
 
     return cfg;
 }

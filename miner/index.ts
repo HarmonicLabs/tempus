@@ -29,9 +29,9 @@ async function main()
 {
     const cfg = await tryGetValidMinerConfig();
 
-    console.log( "miner setup:\n", JSON.stringify( cfg, undefined, 4 ) );
+    console.log( "Running miner with config: ", JSON.stringify( cfg, undefined, 4 ) + "\n" );
 
-    const minerPrivateKey = new PrivateKey(
+    const minerPrivateKey = PrivateKey.fromCbor(
         JSON.parse(
             await readFile(
                 cfg.path_to_miner_private_key,
@@ -271,6 +271,9 @@ async function main()
                     datum: outDat
                 }
             ];
+
+            // send minted tokens to specified changeAddress if not the miner
+            // (miner is set as default change address)
             if( !changeAddressIsMiner )
             {
                 outputs.push({
