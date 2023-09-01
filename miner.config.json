@@ -1,7 +1,8 @@
 {
     "network": "preview",
-    "kupo_url": "https://",
+    "blockfrost_api_key": "",
+    "kupo_url": "https://kupo-preview-api-tempura-47f99a.us1.demeter.run",
     "ogmios_url": "wss://",
-    "path_to_miner_private_key": "",
+    "path_to_miner_private_key": "./minerPrivateKey.local.json",
     "change_address": null
 }

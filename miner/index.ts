@@ -5,6 +5,7 @@ import { readFile } from "fs/promises";
 import { fromAscii, fromHex } from "@harmoniclabs/uint8array-utils";
 import { createHash } from "crypto";
 import { calculateDifficultyNumber, calculateInterlink, getDifficulty, getDifficultyAdjustement, incrementU8Array } from "./utils";
+import { BlockfrostPluts } from "@harmoniclabs/blockfrost-pluts";
 
 type GenesisFile = {
     validator: string,
@@ -52,6 +53,10 @@ async function main()
     const kupmios = new KupmiosPluts( cfg.kupo_url, cfg.ogmios_url );
     process.once( "beforeExit", () => kupmios.close() );
 
+    const blockfrost = new BlockfrostPluts({
+        projectId: cfg.blockfrost_api_key
+    });
+
     const genesis: GenesisFile = JSON.parse(
         await readFile(
             `./tempura-genesis/${cfg.network}.json`,
@@ -61,22 +66,30 @@ async function main()
 
     const validatorHash = new Hash28( genesis.validatorHash );
     const tokenName = fromAscii("TEMPURA");
+    const masterTokenName = fromAscii("itamae")
     const validatorAddress = Address.fromString( genesis.validatorAddress );
 
+    console.log(`looking for utxo at miner address (${minerAddress.toString()})...`);
     const minerUtxos = await kupmios.getUtxosAt( minerAddress );
 
+    console.log(`looking for reference script utxo...`);
     const deployedScriptRefUtxo = await kupmios.resolveUtxo( genesis.deployedRefScript );
 
-    const pps = await kupmios.getProtocolParameters();
+    console.log(`querying protocol parameters...`);
+    const pps = await blockfrost.getProtocolParameters();
 
+    console.log(`looking for genesis informations...`);
     const txBuilder = new TxBuilder(
         pps,
-        await kupmios.getGenesisInfos()
+        await blockfrost.getGenesisInfos()
     );
+
+    let consecutiveErrors = 0;
     
+    // program loop (not mining)
     while( true )
     {
-
+        console.log(`looking for master utxo...`);
         let validatorMasterUtxo = await kupmios.getUtxoByUnit(
             fromHex( genesis.validatorHash ),
             master_tn
@@ -127,6 +140,7 @@ async function main()
     
         console.log("Mining...");
 
+        // mine loop
         let timer = Date.now();
         while( true )
         {
@@ -190,6 +204,7 @@ async function main()
             difficulty = getDifficulty(targetHash);
             const { leadingZeros, difficulty_number } = difficulty;
 
+            // if found hash break
             if (
                 leadingZeros > (state.fields[2] as DataI).int ||
                 (
@@ -323,7 +338,14 @@ async function main()
 
             tx.signWith( minerPrivateKey );
 
-            await kupmios.submitTx( tx );
+            await blockfrost.submitTx( tx );
+
+            console.log(
+                "found next block!" + 
+                "\ndatum: " + dataToCbor( outDat ) + 
+                ";\ntx hash: " + tx.hash.toString() + 
+                "\n"
+            );
 
             minerUtxos.push(
                 ...tx.body.outputs
@@ -340,10 +362,16 @@ async function main()
             );
 
             await kupmios.waitTxConfirmation( tx.hash.toString() );
+
             timer = -5001; // make sure we reset the validator next cycle
+            consecutiveErrors = 0;
         }
         catch( e )
         {
+            consecutiveErrors++;
+
+            if( consecutiveErrors > 3 ) throw e;
+
             console.log(
                 "!!!! ERROR Submittig mining transaction !!!!\n",
                 e

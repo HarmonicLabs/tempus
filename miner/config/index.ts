@@ -10,6 +10,7 @@ import { Address, AddressStr, PaymentCredentials, PrivateKey } from "@harmonicla
 
 export type MinerConfig = {
     readonly network: "preview" | "mainnet",
+    readonly blockfrost_api_key: string,
     readonly kupo_url: string,
     readonly ogmios_url: string,
     readonly path_to_miner_private_key: string,
@@ -18,6 +19,7 @@ export type MinerConfig = {
 
 export type ValidatedMinerConfig = {
     readonly network: "preview" | "mainnet",
+    readonly blockfrost_api_key: string,
     readonly kupo_url: string,
     readonly ogmios_url: string,
     readonly path_to_miner_private_key: string,
@@ -98,11 +100,16 @@ export async function parseMinerConfig( path?: string ): Promise<MinerConfig>
 export function isValidMinerConfig( cfg: MinerConfig ): cfg is ValidatedMinerConfig
 {
     return (
-        cfg.kupo_url.startsWith("https://") &&
-        isValidPath( cfg.kupo_url.slice( "https://".length ) ) &&
+        ( cfg.network === "preview" || cfg.network === "mainnet" ) &&
 
+        typeof cfg.blockfrost_api_key === "string" &&
+        cfg.blockfrost_api_key.startsWith( cfg.network ) &&
+        
+        typeof cfg.kupo_url === "string" &&
+        cfg.kupo_url.startsWith("https://") &&
+
+        typeof cfg.ogmios_url === "string" &&
         cfg.ogmios_url.startsWith("wss://") &&
-        isValidPath( cfg.kupo_url.slice( "wss://".length ) ) &&
 
         isValidPath( cfg.path_to_miner_private_key ) &&
         existsSync( cfg.path_to_miner_private_key ) &&

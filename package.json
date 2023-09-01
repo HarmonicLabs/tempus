@@ -50,6 +50,7 @@
     "homepage": "https://github.com/HarmonicLabs/plu-ts#readme",
     "dependencies": {
         "@cardano-ogmios/client": "^5.6.0",
+        "@harmoniclabs/blockfrost-pluts": "^0.1.2",
         "@harmoniclabs/cardanocli-pluts": "^0.1.4-dev1",
         "@harmoniclabs/cbor": "^1.1.2",
         "@harmoniclabs/crypto": "^0.1.0",
