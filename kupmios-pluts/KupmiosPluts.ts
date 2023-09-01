@@ -1,6 +1,7 @@
-import { Address, AddressStr, CostModelPlutusV1Array, CostModelPlutusV2Array, CostModels, Data, ExBudget, GenesisInfos, Hash28, Hash32, PaymentCredentials, ProtocolParamters, Script, StakeAddress, StakeAddressBech32, StakeCredentials, UTxO, Value, ValueUnitEntry } from "@harmoniclabs/plu-ts";
+import { Address, AddressStr, CanResolveToUTxO, CostModelPlutusV1Array, CostModelPlutusV2Array, CostModels, Data, ExBudget, GenesisInfos, Hash28, Hash32, PaymentCredentials, ProtocolParamters, Script, StakeAddress, StakeAddressBech32, StakeCredentials, Tx, TxOutRef, UTxO, Value, ValueUnitEntry, isITxOutRef, isIUTxO } from "@harmoniclabs/plu-ts";
 import { fromHex, toHex } from "@harmoniclabs/uint8array-utils";
 import { WebSocket } from "ws";
+import { TxOutRef_fromString } from "../scripts/utils";
 
 export class KupmiosPluts
 {
@@ -39,6 +40,75 @@ export class KupmiosPluts
     close(): void
     {
         this.ogmiosWs.close();
+    }
+
+    async submitTx( tx: Tx ): Promise<Hash32>
+    {
+        await this.ogmiosCall(
+            "Submit",
+            { submit: tx.toCbor().toString() }
+        );
+
+        return tx.hash;
+    }
+
+    async waitTxConfirmation( txHash: string, timeout_ms: number = 60_000 ): Promise<boolean>
+    {
+        timeout_ms = Math.abs( Number( timeout_ms ) );
+        timeout_ms = Number.isSafeInteger( timeout_ms ) ? timeout_ms : 60_000;
+
+        const timelimit = Date.now() + timeout_ms;
+        
+        while( true )
+        {
+            const utxos: any[] = await fetch(
+                // tx_index@tx_hash = *@${txHash}
+                `${this.kupoUrl}/matches/*@${txHash}?unspent`,
+            ).then((res) => res.json());
+    
+            if(utxos && utxos.length > 0)
+            {
+                return true;
+            }
+
+            if( Date.now() > timelimit )
+            {
+                return false
+            }
+
+            await new Promise( r => setTimeout( r, 5000 ) );
+        }
+    }
+
+    async resolveUtxo( u: CanResolveToUTxO ): Promise<UTxO>
+    {
+        return (await this.resolveUtxos([ u ]))[0];
+    }
+
+    async resolveUtxos( UTxOs: CanResolveToUTxO[] ): Promise<UTxO[]>
+    {
+        const outRefs = UTxOs.map( u => {
+            if( isIUTxO( u ) ) u = u.utxoRef;
+            if( isITxOutRef( u ) ) return new TxOutRef( u );
+            return TxOutRef_fromString( u );
+        });
+        const queryHashes = [...new Set(outRefs.map( outRef => outRef.id.toString() ))];
+
+        const utxos = await Promise.all(queryHashes.map(async (txHash) => {
+            const result = await fetch(
+                `${this.kupoUrl}/matches/*@${txHash}?unspent`,
+            ).then((res) => res.json());
+            return this.kupmiosUtxosToUtxos(result);
+        }));
+
+        return utxos
+            .reduce( (acc, utxos) => acc.concat(utxos), [] )
+            .filter(({ utxoRef }) =>
+                outRefs.some( outRef =>
+                    utxoRef.id === outRef.id &&
+                    utxoRef.index === outRef.index
+                )
+            );
     }
 
     async getUtxosAt( address: Address | AddressStr ): Promise<UTxO[]>

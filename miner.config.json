@@ -1,0 +1,7 @@
+{
+    "network": "preview",
+    "kupo_url": "https://",
+    "ogmios_url": "wss://",
+    "path_to_miner_private_key": "",
+    "change_address": null
+}

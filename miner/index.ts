@@ -1,10 +1,10 @@
-import { AddressStr, Data, DataB, DataConstr, DataI, DataList, dataToCbor, eqData, isData } from "@harmoniclabs/plu-ts";
-import { KUPO_URL, OGMIOS_URL } from "../env";
+import { Address, AddressStr, Data, DataB, DataConstr, DataI, DataList, Hash28, ITxBuildOutput, PaymentCredentials, PrivateKey, TxBuilder, Value, dataToCbor, eqData, isData } from "@harmoniclabs/plu-ts";
+import { tryGetValidMinerConfig } from "./config";
 import { KupmiosPluts } from "../kupmios-pluts";
 import { readFile } from "fs/promises";
-import { fromAscii, fromHex, toHex } from "@harmoniclabs/uint8array-utils";
+import { fromAscii, fromHex } from "@harmoniclabs/uint8array-utils";
 import { createHash } from "crypto";
-import { calculateInterlink, getDifficulty, incrementU8Array } from "./utils";
+import { calculateDifficultyNumber, calculateInterlink, getDifficulty, getDifficultyAdjustement, incrementU8Array } from "./utils";
 
 type GenesisFile = {
     validator: string,
@@ -27,18 +27,53 @@ const master_tn = fromAscii("itamae");
 
 async function main()
 {
-    const network: "preview" | "mainnet" = process.argv[2] === "preview" ? "preview" : "mainnet";
+    const cfg = await tryGetValidMinerConfig();
 
-    const kupmios = new KupmiosPluts( KUPO_URL, OGMIOS_URL );
+    console.log( "miner setup:\n", JSON.stringify( cfg, undefined, 4 ) );
+
+    const minerPrivateKey = new PrivateKey(
+        JSON.parse(
+            await readFile(
+                cfg.path_to_miner_private_key,
+                { encoding: "utf-8" }
+            )
+        ).cborHex
+    );
+
+    const minerAddress = new Address(
+        cfg.network === "mainnet" ? "mainnet" : "testnet",
+        PaymentCredentials.pubKey( minerPrivateKey.derivePublicKey().hash )
+    );
+
+    const changeAddress = Address.fromString( cfg.change_address );
+
+    const changeAddressIsMiner = changeAddress.toString() === minerAddress.toString();
+
+    const kupmios = new KupmiosPluts( cfg.kupo_url, cfg.ogmios_url );
     process.once( "beforeExit", () => kupmios.close() );
+
+    let minerUtxos = await kupmios.getUtxosAt( minerAddress );
 
     const genesis = JSON.parse(
         await readFile(
-            `./tempura-genesis/${network}.json`,
+            `./tempura-genesis/${cfg.network}.json`,
             { encoding: "utf-8" }
         )
     ) as GenesisFile;
 
+    const validatorHash = new Hash28( genesis.validatorHash );
+    const tokenName = fromAscii("TEMPURA");
+    const validatorAddress = Address.fromString( genesis.validatorAddress );
+
+    const deployedScriptRefUtxo = await kupmios.resolveUtxo( genesis.deployedRefScript );
+
+    const pps = await kupmios.getProtocolParameters();
+
+    const txBuilder = new TxBuilder(
+        pps,
+        await kupmios.getGenesisInfos()
+    );
+    
     while( true )
     {
 
@@ -190,31 +225,111 @@ async function main()
         let leading_zeros = (state.fields[2] as DataI).int;
 
         if (
-            state.fields[0] as bigint % 2016n === 0n &&
-            state.fields[0] as bigint > 0
+            (state.fields[0] as DataI).int % BigInt(2016) === BigInt(0) &&
+            (state.fields[0] as DataI).int > 0
         ) {
-            const adjustment = getDifficultyAdjustement(epoch_time, 1_209_600_000n);
+            const adjustment = getDifficultyAdjustement(epoch_time, BigInt(1_209_600_000) );
     
-            epoch_time = 0n;
+            epoch_time = BigInt(0);
     
             const new_difficulty = calculateDifficultyNumber(
-            {
-                leadingZeros: state.fields[2] as bigint,
-                difficulty_number: state.fields[3] as bigint,
-            },
-            adjustment.numerator,
-            adjustment.denominator,
+                {
+                    leadingZeros: (state.fields[2] as DataI).int,
+                    difficulty_number: (state.fields[3] as DataI).int,
+                },
+                adjustment.numerator,
+                adjustment.denominator,
             );
     
             difficulty_number = new_difficulty.difficulty_number;
             leading_zeros = new_difficulty.leadingZeros;
+        }
+
+        const outDat = new DataConstr(
+            0, 
+            [
+                new DataI(
+                    (state.fields[0] as DataI).int + BigInt(1)
+                ),
+                new DataB(targetHash),
+                new DataI( leading_zeros ),
+                new DataI( difficulty_number ),
+                new DataI( epoch_time ),
+                new DataI( BigInt(90000 + realTimeNow) ),
+                new DataI( 0 ),
+                new DataList(
+                    interlink.map(b => new DataB( b ))
+                )
+            ]
+        );
+
+        try {
+            const outputs: ITxBuildOutput[] = [
+                {
+                    address: validatorAddress,
+                    value: validatorMasterUtxo.resolved.value,
+                    datum: outDat
+                }
+            ];
+            if( !changeAddressIsMiner )
+            {
+                outputs.push({
+                    address: changeAddress,
+                    value: new Value([
+                        Value.lovelaceEntry( 2_000_000 ),
+                        Value.singleAssetEntry( validatorHash, tokenName, 5_000_000_000 )
+                    ])
+                });
+            }
+            const tx = txBuilder.buildSync({
+                inputs: [
+                    {
+                        utxo: validatorMasterUtxo,
+                        referenceScriptV2: {
+                            refUtxo: deployedScriptRefUtxo,
+                            datum: "inline",
+                            redeemer: new DataConstr( 1, [ new DataB( nonce ) ])
+                        }
+                    },
+                    { utxo: minerUtxos[0] }
+                ],
+                collaterals: [ minerUtxos[0] ],
+                mints: [
+                    {
+                        value: Value.singleAsset( validatorHash, tokenName, 5_000_000_000 ),
+                        script: {
+                            ref: deployedScriptRefUtxo,
+                            policyId: validatorHash,
+                            redeemer: new DataConstr( 0, [] )
+                        }
+                    }
+                ],
+                outputs,
+                invalidBefore: txBuilder.posixToSlot( realTimeNow ),
+                invalidAfter: txBuilder.posixToSlot( realTimeNow + 180_000 ),
+                changeAddress: minerAddress
+            });
+
+            tx.signWith( minerPrivateKey );
+
+            await kupmios.submitTx( tx );
+
+            await kupmios.waitTxConfirmation( tx.hash.toString() );
+            timer = -5001; // make sure we reset the validator next cycle
+        }
+        catch( e )
+        {
+            console.log(
+                "!!!! ERROR Submittig mining transaction !!!!\n",
+                e
+            );
         }
     }
 
     kupmios.close();
 }
 
-if( process.argv[1].includes("miner/index.js") )
+if( process.argv[1].includes("miner/index") )
 {
     main();
 }

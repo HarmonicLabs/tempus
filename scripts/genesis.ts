@@ -5,14 +5,15 @@ import { sha2_256 } from "@harmoniclabs/crypto";
 import { fromAscii, toHex } from "@harmoniclabs/uint8array-utils";
 import { writeFile } from "fs/promises";
 import { KupmiosPluts } from "../kupmios-pluts";
-import { KUPO_URL, OGMIOS_URL } from "../env";
+import { tryGetValidMinerConfig } from "../miner/config";
 
 const ADA = 1_000_000;
 
 void async function main()
 {
+    const cfg = await tryGetValidMinerConfig();
 
-    const utxoRefStr = process.argv[3];
+    const utxoRefStr = process.argv[2];
 
     const utxoRef = TxOutRef_fromString( utxoRefStr );
 
@@ -28,7 +29,7 @@ void async function main()
         }
     });
 
-    const kupmios = new KupmiosPluts( KUPO_URL, OGMIOS_URL );
+    const kupmios = new KupmiosPluts( cfg.kupo_url, cfg.ogmios_url );
 
     const pps = await kupmios.getProtocolParameters();
 
@@ -39,7 +40,7 @@ void async function main()
 
     const utxoRefData = utxoRef.toData();
     
-    const network = process.argv[2] ?? "mainnet";
+    const network = process.argv[3] ?? cfg.network;
 
     const envDir = `./${network}`;
     await withDir( envDir );
