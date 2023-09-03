@@ -123,7 +123,7 @@ export const value_has_only_master_and_lovelaces = phoist(
         PValue.type,
         PCurrencySymbol.type
     ],  bool)
-    ( ( value, own_policy ) => {
+    (( value, own_policy ) => {
     
         // inlined
         const onlyTwoEntries = pisEmpty.$( value.tail.tail );
@@ -133,7 +133,7 @@ export const value_has_only_master_and_lovelaces = phoist(
 
         const checkMasterAssets = plet(
             plam( PValueEntry.type, bool )
-            (({ policy, assets }) => {
+            (({ fst: policy, snd: assets }) => {
 
                 // inlined
                 const onlySigleAsset = pisEmpty.$( assets.tail );

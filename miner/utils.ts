@@ -1,3 +1,4 @@
+import { toHex } from "@harmoniclabs/uint8array-utils";
 
 export function getDifficulty(
     hash: Uint8Array,
@@ -30,20 +31,30 @@ export function getDifficulty(
     return { leadingZeros: BigInt( 32 ), difficulty_number: BigInt( 0 ) };
 }
 
-export function incrementU8Array( x: Uint8Array ): void
+export function incrementU8ArrayByOne( x: Uint8Array ): void
 {
-    if( x[0] === 255 ) 
+    let i = x.length - 1;
+    while( i >= 0 )
     {
-        crypto.getRandomValues( x );
-        return;
-    }
-    for (let i = 0; i < x.length; i++) {
-        if (x[i] === 255) {
+        if( x[i] >= 255 )
+        {
             x[i] = 0;
-        } else {
-            x[i] += 1;
-            break;
+            i--;
+            continue;
         }
+        else
+        {
+            x[i] += 1;
+            return;
+        }
+    }
+}
+
+export function incrementU8Array( x: Uint8Array, incr = 1 ): void
+{
+    for( let i = 0; i < incr; i++ )
+    {
+        incrementU8ArrayByOne( x );
     }
 }
 

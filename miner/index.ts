@@ -1,8 +1,8 @@
-import { Address, AddressStr, Data, DataB, DataConstr, DataI, DataList, Hash28, ITxBuildOutput, PaymentCredentials, PrivateKey, TxBuilder, UTxO, Value, dataToCbor, eqData, isData } from "@harmoniclabs/plu-ts";
+import { Address, AddressStr, Data, DataB, DataConstr, DataI, DataList, Hash28, ITxBuildOutput, PaymentCredentials, PrivateKey, TxBuilder, TxOutRef, UTxO, Value, dataToCbor, eqData, isData } from "@harmoniclabs/plu-ts";
 import { tryGetValidMinerConfig } from "./config";
 import { KupmiosPluts } from "../kupmios-pluts";
 import { readFile } from "fs/promises";
-import { fromAscii, fromHex } from "@harmoniclabs/uint8array-utils";
+import { fromAscii, fromHex, toHex } from "@harmoniclabs/uint8array-utils";
 import { createHash } from "crypto";
 import { calculateDifficultyNumber, calculateInterlink, getDifficulty, getDifficultyAdjustement, incrementU8Array } from "./utils";
 import { BlockfrostPluts } from "@harmoniclabs/blockfrost-pluts";
@@ -67,11 +67,17 @@ async function main()
     const masterTokenName = fromAscii("itamae")
     const validatorAddress = Address.fromString( genesis.validatorAddress );
 
-    console.log(`looking for utxo at miner address (${minerAddress.toString()})...`);
-    const minerUtxos = await kupmios.getUtxosAt( minerAddress );
-
     console.log(`looking for reference script utxo...`);
     const deployedScriptRefUtxo = await kupmios.resolveUtxo( genesis.deployedScriptUtxoRef );
+
+    if( !deployedScriptRefUtxo )
+    {
+        console.log( genesis.deployedScriptUtxoRef );
+        throw new Error("missing deployed script")
+    }
+
+    console.log(`looking for utxo at miner address (${minerAddress.toString()})...`);
+    const minerUtxos = await kupmios.getUtxosAt( minerAddress );
 
     console.log(`querying protocol parameters...`);
     const pps = await blockfrost.getProtocolParameters();
@@ -88,10 +94,16 @@ async function main()
     while( true )
     {
         console.log(`looking for master utxo...`);
-        let validatorMasterUtxo = await kupmios.getUtxoByUnit(
-            fromHex( genesis.validatorHash ),
-            masterTokenName
+        let validatorMasterUtxo = (await kupmios.getUtxosAt( validatorAddress )).find(
+            u => u.resolved.value.get( validatorHash.toString(), masterTokenName ) === BigInt(1)
         );
+
+        if( !validatorMasterUtxo )
+        {
+            throw new Error(
+                `couldn't find master NFT "${validatorHash.toString()}.${toHex(masterTokenName)}" at address ${validatorAddress.toString()}`
+            )
+        }
     
         let state: Data = validatorMasterUtxo.resolved.datum as Data;
         
@@ -110,24 +122,26 @@ async function main()
         let nonce = new Uint8Array( 16 );
     
         crypto.getRandomValues( nonce );
-    
-        let targetState = new DataConstr(
-            0,
-            [
-                // nonce: ByteArray
-                new DataB( nonce ),
-                // block_number: Int
-                state.fields[0],
-                // current_hash: ByteArray
-                state.fields[1],
-                // leading_zeros: Int
-                state.fields[2],
-                // difficulty_number: Int
-                state.fields[3],
-                // epoch_time: Int
-                state.fields[4]
-            ]
-        );
+
+        let targetState = dataToCbor(
+            new DataConstr(
+                0,
+                [
+                    // nonce: ByteArray
+                    new DataB( nonce ),
+                    // block_number: Int
+                    state.fields[0],
+                    // current_hash: ByteArray
+                    state.fields[1],
+                    // leading_zeros: Int
+                    state.fields[2],
+                    // difficulty_number: Int
+                    state.fields[3],
+                    // epoch_time: Int
+                    state.fields[4]
+                ]
+            )
+        ).toBuffer()
     
         let targetHash: Uint8Array;
     
@@ -142,14 +156,19 @@ async function main()
         let timer = Date.now();
         while( true )
         {
-            if( Date.now() - timer > 5000 )
+            if( Date.now() - timer > 5_000 )
             {
-                console.log("No block found in the last 5 seconds, updating state...");
-                timer = Date.now();
-                validatorMasterUtxo = await kupmios.getUtxoByUnit(
-                    fromHex( genesis.validatorHash ),
-                    masterTokenName
+                validatorMasterUtxo = (await kupmios.getUtxosAt( validatorAddress )).find(
+                    u => u.resolved.value.get( validatorHash.toString(), masterTokenName ) === BigInt(1)
                 );
+                timer = Date.now();
+
+                if( !validatorMasterUtxo )
+                {
+                    throw new Error(
+                        `couldn't find master NFT "${validatorHash.toString()}.${toHex(masterTokenName)}" at address ${validatorAddress.toString()}`
+                    )
+                }
     
                 if( !( validatorMasterUtxo.resolved.datum instanceof DataConstr ) )
                 {
@@ -166,38 +185,41 @@ async function main()
                 // if someone else found a block
                 if( !eqData( validatorMasterUtxo.resolved.datum, state ) )
                 {
+                    console.log("someone else found a block; updating state")
                     state = validatorMasterUtxo.resolved.datum;
                     
                     // nonce = new Uint8Array(16);
                     crypto.getRandomValues(nonce);
-        
-                    targetState = new DataConstr(
-                        0,
-                        [
-                            // nonce: ByteArray
-                            new DataB( nonce ),
-                            // block_number: Int
-                            state.fields[0],
-                            // current_hash: ByteArray
-                            state.fields[1],
-                            // leading_zeros: Int
-                            state.fields[2],
-                            // difficulty_number: Int
-                            state.fields[3],
-                            // epoch_time: Int
-                            state.fields[4]
-                        ]
-                    );
+
+                    targetState = dataToCbor(
+                        new DataConstr(
+                            0,
+                            [
+                                // nonce: ByteArray
+                                new DataB( nonce ),
+                                // block_number: Int
+                                state.fields[0],
+                                // current_hash: ByteArray
+                                state.fields[1],
+                                // leading_zeros: Int
+                                state.fields[2],
+                                // difficulty_number: Int
+                                state.fields[3],
+                                // epoch_time: Int
+                                state.fields[4]
+                            ]
+                        )
+                    ).toBuffer()
                 }
             }
 
+            modifyNonce( targetState, nonce )
+
             targetHash = nodeSha256(
-                nodeSha256(
-                    dataToCbor(
-                        targetState 
-                    ).toBuffer()
-                )
+                nodeSha256( targetState )
             );
+
+            // console.log( toHex( nonce ), toHex( targetHash ) )
 
             difficulty = getDifficulty(targetHash);
             const { leadingZeros, difficulty_number } = difficulty;
@@ -214,8 +236,7 @@ async function main()
             }
 
             incrementU8Array( nonce );
-
-            targetState.fields[0] = new DataB( nonce );
+            // targetState.fields[0] = new DataB( nonce );
         }
 
         const realTimeNow = Number((Date.now() / 1000).toFixed(0)) * 1000 - 60000;
@@ -366,6 +387,9 @@ async function main()
         }
         catch( e )
         {
+            console.log( "nonce:", toHex( nonce ) );
+            console.log( "targetState:", toHex( targetState ) );
+            throw e;
             consecutiveErrors++;
 
             if( consecutiveErrors > 3 ) throw e;
@@ -390,4 +414,12 @@ export function nodeSha256( data: Uint8Array ): Uint8Array
     return createHash("sha256")
     .update(data)
     .digest()
+}
+
+function modifyNonce( targetState: Uint8Array, nonce: Uint8Array ): void
+{
+    for( let i = 0; i < 16; i++ )
+    {
+        targetState[i + 4] = nonce[i];
+    }
 }

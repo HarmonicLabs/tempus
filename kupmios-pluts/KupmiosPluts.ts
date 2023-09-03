@@ -1,6 +1,6 @@
-import { Address, AddressStr, CanResolveToUTxO, CostModelPlutusV1Array, CostModelPlutusV2Array, CostModels, Data, ExBudget, GenesisInfos, Hash28, Hash32, PaymentCredentials, ProtocolParamters, Script, StakeAddress, StakeAddressBech32, StakeCredentials, Tx, TxOutRef, UTxO, Value, ValueUnitEntry, isITxOutRef, isIUTxO } from "@harmoniclabs/plu-ts";
+import { Address, AddressStr, CanResolveToUTxO, CostModelPlutusV1Array, CostModelPlutusV2Array, CostModels, Data, ExBudget, GenesisInfos, Hash28, Hash32, PaymentCredentials, ProtocolParamters, Script, StakeAddress, StakeAddressBech32, StakeCredentials, Tx, TxOutRef, UTxO, Value, ValueUnitEntry, dataFromCbor, isITxOutRef, isIUTxO } from "@harmoniclabs/plu-ts";
 import { fromHex, toHex } from "@harmoniclabs/uint8array-utils";
-import { WebSocket } from "ws";
+// import { WebSocket } from "ws";
 import { TxOutRef_fromString } from "../scripts/utils";
 
 export class KupmiosPluts
@@ -24,29 +24,29 @@ export class KupmiosPluts
         let _ogmiosWs: WebSocket | undefined = undefined;
         let _isOgmiosReady = false;
 
-        Object.defineProperty(
-            this, "ogmiosWs", {
-                get: () => {
-                    if(!( _ogmiosWs instanceof WebSocket ))
-                    {
-                        _ogmiosWs = new WebSocket( this.ogmiosUrl );
-                        _ogmiosWs.addEventListener("open", () => { _isOgmiosReady = true }, { once: true });
-                    }
-                    return _ogmiosWs;
-                },
-                set: () => {},
-                enumerable: true,
-                configurable: false
-            }
-        );
-        Object.defineProperty(
-            this, "isOgmiosWsReady", {
-                get: () => _isOgmiosReady,
-                set: () => {},
-                enumerable: true,
-                configurable: false
-            }
-        );
+        // Object.defineProperty(
+        //     this, "ogmiosWs", {
+        //         get: () => {
+        //             if(!( _ogmiosWs instanceof WebSocket ))
+        //             {
+        //                 _ogmiosWs = new WebSocket( this.ogmiosUrl );
+        //                 _ogmiosWs.addEventListener("open", () => { _isOgmiosReady = true }, { once: true });
+        //             }
+        //             return _ogmiosWs;
+        //         },
+        //         set: () => {},
+        //         enumerable: true,
+        //         configurable: false
+        //     }
+        // );
+        // Object.defineProperty(
+        //     this, "isOgmiosWsReady", {
+        //         get: () => _isOgmiosReady,
+        //         set: () => {},
+        //         enumerable: true,
+        //         configurable: false
+        //     }
+        // );
     }
 
     async submitTx( tx: Tx ): Promise<Hash32>
@@ -87,7 +87,7 @@ export class KupmiosPluts
         }
     }
 
-    async resolveUtxo( u: CanResolveToUTxO ): Promise<UTxO>
+    async resolveUtxo( u: CanResolveToUTxO ): Promise<UTxO | undefined>
     {
         return (await this.resolveUtxos([ u ]))[0];
     }
@@ -102,17 +102,18 @@ export class KupmiosPluts
         const queryHashes = [...new Set(outRefs.map( outRef => outRef.id.toString() ))];
 
         const utxos = await Promise.all(queryHashes.map(async (txHash) => {
+            console.log( txHash );
             const result = await fetch(
                 `${this.kupoUrl}/matches/*@${txHash}?unspent`,
             ).then((res) => res.json());
             return this.kupmiosUtxosToUtxos(result);
-        }));
+        }))
+        .then( res => res.reduce( (acc, utxos) => acc.concat(utxos), [] ) );
 
         return utxos
-            .reduce( (acc, utxos) => acc.concat(utxos), [] )
             .filter(({ utxoRef }) =>
                 outRefs.some( outRef =>
-                    utxoRef.id === outRef.id &&
+                    utxoRef.id.toString() === outRef.id.toString() &&
                     utxoRef.index === outRef.index
                 )
             );
@@ -269,7 +270,7 @@ export class KupmiosPluts
           throw new Error(`No datum found for datum hash: ${datumHash}`);
         }
 
-        return result.datum;
+        return dataFromCbor( result.datum );
     }
 
     async resolveScriptHash( hash: Hash28 | Uint8Array | string ): Promise<Script> {
@@ -314,6 +315,12 @@ export class KupmiosPluts
 
                 const assets: { [unit: string ]: number } = utxo.value.assets;
 
+                const units = Object.keys( assets );
+
+                const datum = utxo.datum_type === "hash" ? new Hash32( utxo.datum_hash ) :
+                utxo.datum_type === "inline" ? await this.resolveDatumHash( utxo.datum_hash ) :
+                undefined;
+
                 return new UTxO({
                     utxoRef: {
                         id: utxo.transaction_id,
@@ -321,19 +328,18 @@ export class KupmiosPluts
                     },
                     resolved: {
                         address: utxo.address,
-                        value: Value.add(
+                        value: units.length > 0 ?
+                            Value.add(
+                                Value.lovelaces( utxo.value.coins ),
+                                Value.fromUnits(
+                                    units.map( unit => ({
+                                        unit: unit.replace(".", ""),
+                                        quantity: assets[unit]
+                                    }))
+                                )
+                            ) :
                             Value.lovelaces( utxo.value.coins ),
-                            Value.fromUnits(
-                                Object.keys( assets ).map( unit => ({
-                                    unit: unit.replace(".", ""),
-                                    quantity: assets[unit]
-                                }))
-                            )
-                        ),
-                        datum:
-                            utxo.datum_type === "hash" ? new Hash32( utxo.datum_hash ) :
-                            utxo.datum_type === "inline" ? await this.resolveDatumHash( utxo.datum_hash ) :
-                            undefined,
+                        datum,
                         refScript: typeof utxo.script_hash === "string" ? await this.resolveScriptHash( utxo.script_hash ) : undefined
                     }
                 });

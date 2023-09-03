@@ -374,7 +374,7 @@ export const tempura
 
                 // inlined
                 // Spend(6) requirement: Output has only master token and ada
-                const outHasOnlyMaster = value_has_only_master_and_lovelaces.$( ownOut.value ).$( own_validator_hash );
+                const outHasOnlyMaster = value_contains_master.$( ownOut.value ).$( own_validator_hash );
 
                 // Check output datum contains correct epoch time, block number, hash, and leading zeros
                 // Check for every divisible by 2016 block: 
