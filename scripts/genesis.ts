@@ -1,4 +1,4 @@
-import { PTxOutRef, compile, pData, Script, Address, NetworkT, PaymentCredentials, dataToCbor, DataConstr, DataI, DataB, DataList, TxOutRef, Hash28, Data, UTxO, Value, TxBuilder, TxOut } from "@harmoniclabs/plu-ts";
+import { PTxOutRef, compile, pData, Script, Address, NetworkT, PaymentCredentials, dataToCbor, DataConstr, DataI, DataB, DataList, TxOutRef, Hash28, Data, UTxO, Value, TxBuilder, TxOut, PrimType, PrivateKey, Tx } from "@harmoniclabs/plu-ts";
 import { tempura } from "../onchain/tempura";
 import { TxOutRef_fromString, withDir } from "./utils";
 import { sha2_256 } from "@harmoniclabs/crypto";
@@ -7,35 +7,56 @@ import { writeFile } from "fs/promises";
 import { KupmiosPluts } from "../kupmios-pluts";
 import { tryGetValidMinerConfig } from "../miner/config";
 import { BlockfrostPluts } from "@harmoniclabs/blockfrost-pluts";
+import { readFile } from "fs/promises";
 
 const ADA = 1_000_000;
+
+const itamae_tn = fromAscii("itamae");
 
 void async function main()
 {
     const cfg = await tryGetValidMinerConfig();
 
-    const utxoRefStr = process.argv[2];
-
-    const utxoRef = TxOutRef_fromString( utxoRefStr );
-
-    // please change this before running
-    const changeAddress = "addr_test1qqgdj25j6pj6ac8pe5khv7l6ge337mmm5eyauaj0nq8skdmxqj6zqxuv7k6lu4m8ll4c9zatlxmr2a9wyluhqkz6grhq84r806"
-
     const kupmios = new KupmiosPluts( cfg.kupo_url, "" /* cfg.ogmios_url */ );
     process.on("beforeExit", () => kupmios.close() );
 
     const blockfrost = new BlockfrostPluts({
-        projectId: cfg.blockfrost_api_key
+        projectId: cfg.blockfrost_api_key,
+        network: cfg.network
     });
+    // const utxoRefStr = process.argv[2];
+// 
+    // const utxoRef = TxOutRef_fromString( utxoRefStr );
 
-    const inputUtxo = await blockfrost.resolveUtxos([ utxoRef ]).then(([ u ]) => u);
+    const privateKey = PrivateKey.fromCbor(
+        JSON.parse(
+            await readFile(
+                cfg.path_to_miner_private_key,
+                { encoding: "utf-8" }
+            )
+        ).cborHex
+    )
+
+    const changeAddress = new Address(
+        cfg.network === "mainnet" ? "mainnet" : "testnet",
+        PaymentCredentials.pubKey( privateKey.derivePublicKey().hash )
+    );
+
+    const minerUtxo = await blockfrost.addressUtxos( changeAddress ).then(([ u ]) => u);
+    
+    const utxoRef = minerUtxo.utxoRef;
+    const utxoRefStr = utxoRef.toString();
+
+    console.log( utxoRefStr );
+
+    const inputUtxo = minerUtxo; // await blockfrost.resolveUtxos([ utxoRef ]).then(([ u ]) => u);
 
     const pps = await blockfrost.getProtocolParameters();
+    const genesisInfos = await blockfrost.getGenesisInfos();
+    // genesisInfos.systemStartPOSIX = BigInt(genesisInfos.systemStartPOSIX) * BigInt( 1000 );
+    console.log( genesisInfos );
 
-    const txBuilder = new TxBuilder(
-        pps,
-        await blockfrost.getGenesisInfos()
-    );
+    const txBuilder = new TxBuilder( pps, genesisInfos );
 
     const utxoRefData = utxoRef.toData();
     
@@ -44,12 +65,7 @@ void async function main()
     const envDir = `./${network}`;
     await withDir( envDir );
 
-    // const ogmiosWs = new WebSocket( OGMIOS_URL );
-    // ogmiosWs.send()
-
     console.log("compiling contract...");
-    console.time("contract compilation");
-    
     const compiledContract = compile(
         tempura
         .$(
@@ -58,8 +74,6 @@ void async function main()
             )
         )
     );
-
-    console.timeEnd("contract compilation");
 
     const tempuraScript = new Script(
         "PlutusScriptV2",
@@ -83,16 +97,23 @@ void async function main()
         )
     );
 
-    const now = Date.now() + 60_000;
+    const now = Date.now() - 2_000;
     const in3Mins = now + 180_000;
 
     const invalidBefore = txBuilder.posixToSlot( now ) + 1;
     const invalidAfter =  txBuilder.posixToSlot( in3Mins ) - 2;
 
+    console.log( "now", now );
+    console.log( "now", new Date( now ).toString() );
+    console.log( "in3Mins", in3Mins );
+    console.log( "in3Mins", new Date( in3Mins ).toString() );
+    console.log( "invalidBefore", invalidBefore );
+    console.log( "invalidAfter", invalidAfter );
+
     const lower_range = txBuilder.slotToPOSIX( invalidBefore );
     const upper_range = txBuilder.slotToPOSIX( invalidAfter );
 
-    const avg_time = ( upper_range - lower_range ) / 2 + lower_range;
+    const avg_time = ( ( ( upper_range - lower_range ) / 2 ) + lower_range );
 
     /*
     SpendingState.SpendingState({
@@ -120,9 +141,7 @@ void async function main()
         ]
     );
 
-    const itamae_tn = fromAscii("itamae");
-
-    const minOutAda = BigInt(pps.utxoCostPerByte) * BigInt(
+    let minOutAda = BigInt(pps.utxoCostPerByte) * BigInt(
         new TxOut({
             address: tempuraScriptAddress,
             value: new Value([
@@ -131,13 +150,20 @@ void async function main()
             ]),
             datum
         }).toCbor().toBuffer().length
-    );
+    ) + BigInt( 1_000_000 );
 
     console.log("creating the transaciton...");
-    console.time("tx creation");
     //*
     const tx = await txBuilder.build({
         inputs: [{ utxo: inputUtxo }],
+        collaterals: [ inputUtxo ],
+        collateralReturn: {
+            address: inputUtxo.resolved.address,
+            value: Value.sub(
+                inputUtxo.resolved.value,
+                Value.lovelaces( 15_000_000 )
+            )
+        },
         mints: [
             {
                 script: {
@@ -164,12 +190,50 @@ void async function main()
         changeAddress 
     });
 
-    console.timeEnd("tx creation");
-
+    // tx = new Tx({
+    //     ...tx,
+    //     body: {
+    //         ...tx.body,
+    //         ttl: invalidAfter
+    //     }
+    // });
+    
     const txCbor = tx.toCbor().toString();
     const txHash = tx.hash.toString();
 
+    console.log( "tx invalidBefore slot: ", tx.body.validityIntervalStart );
+    console.log( "tx invalidBefore posix: ",
+        new Date(
+            txBuilder.slotToPOSIX(
+                Number(tx.body.validityIntervalStart)
+            )
+        ).toString()
+    );
+
+    const invalidAfterSlot = Number(tx.body.validityIntervalStart) + Number(tx.body.ttl)
+    console.log( "tx invalidAfter slot: ", invalidAfterSlot );
+    console.log( "tx invalidAfter posix: ",
+        new Date(
+            txBuilder.slotToPOSIX( invalidAfterSlot )
+        ).toString()
+    );
+    
     console.log( txCbor );
+
+    tx.signWith( privateKey );
+
+    await blockfrost.submitTx( tx );
+    await kupmios.waitTxConfirmation( tx.hash.toString() );
+
+    minOutAda = BigInt(pps.utxoCostPerByte) * BigInt(
+        new TxOut({
+            address: tempuraScriptAddress,
+            value: Value.lovelaces( 15_000 * ADA ),
+            // invalid datum, locked forever
+            datum: new DataI( 0 ),
+            refScript: tempuraScript
+        }).toCbor().toBuffer().length
+    ) + BigInt( 1_000_000 );
 
     const deployTx = await txBuilder.build({
         inputs: [{
@@ -184,7 +248,7 @@ void async function main()
         outputs: [
             {
                 address: tempuraScriptAddress,
-                value: Value.lovelaces( 15 * ADA ),
+                value: Value.lovelaces( minOutAda ),
                 // invalid datum, locked forever
                 datum: new DataI( 0 ),
                 refScript: tempuraScript
@@ -194,6 +258,8 @@ void async function main()
     });
 
     console.log( "\n\n" + deployTx.toCbor().toString() );
+
+    await blockfrost.submitTx( deployTx );
 
     await writeTempuraGenesis(
         network,
@@ -206,6 +272,8 @@ void async function main()
         new TxOutRef({ id: deployTx.hash.toString(), index: 0 }),
         txHash
     );
+
+    await kupmios.waitTxConfirmation( deployTx.hash.toString() );
     //*/
 
     kupmios.close();
