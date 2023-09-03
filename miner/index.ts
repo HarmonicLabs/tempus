@@ -14,17 +14,15 @@ type GenesisFile = {
     bootstrapHash: string,
     datum: string,
     txHash: string,
-    utxoRef: {
+    parameterUtxoRef: {
         id: string,
         index: number
     },
-    deployedRefScript: {
+    deployedScriptUtxoRef: {
         id: string,
         index: number
     }
 }
-
-const master_tn = fromAscii("itamae");
 
 async function main()
 {
@@ -73,7 +71,7 @@ async function main()
     const minerUtxos = await kupmios.getUtxosAt( minerAddress );
 
     console.log(`looking for reference script utxo...`);
-    const deployedScriptRefUtxo = await kupmios.resolveUtxo( genesis.deployedRefScript );
+    const deployedScriptRefUtxo = await kupmios.resolveUtxo( genesis.deployedScriptUtxoRef );
 
     console.log(`querying protocol parameters...`);
     const pps = await blockfrost.getProtocolParameters();
@@ -92,7 +90,7 @@ async function main()
         console.log(`looking for master utxo...`);
         let validatorMasterUtxo = await kupmios.getUtxoByUnit(
             fromHex( genesis.validatorHash ),
-            master_tn
+            masterTokenName
         );
     
         let state: Data = validatorMasterUtxo.resolved.datum as Data;
@@ -150,7 +148,7 @@ async function main()
                 timer = Date.now();
                 validatorMasterUtxo = await kupmios.getUtxoByUnit(
                     fromHex( genesis.validatorHash ),
-                    master_tn
+                    masterTokenName
                 );
     
                 if( !( validatorMasterUtxo.resolved.datum instanceof DataConstr ) )

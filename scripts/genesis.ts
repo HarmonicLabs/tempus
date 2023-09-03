@@ -97,7 +97,7 @@ void async function main()
         )
     );
 
-    const now = Date.now() - 2_000;
+    const now = Date.now() - 15_000;
     const in3Mins = now + 180_000;
 
     const invalidBefore = txBuilder.posixToSlot( now ) + 1;
@@ -222,6 +222,7 @@ void async function main()
 
     tx.signWith( privateKey );
 
+    await waitSlot( blockfrost, Number(tx.body.validityIntervalStart) );
     await blockfrost.submitTx( tx );
     await kupmios.waitTxConfirmation( tx.hash.toString() );
 
@@ -259,6 +260,8 @@ void async function main()
 
     console.log( "\n\n" + deployTx.toCbor().toString() );
 
+    deployTx.signWith( privateKey );
+
     await blockfrost.submitTx( deployTx );
 
     await writeTempuraGenesis(
@@ -275,6 +278,17 @@ void async function main()
 
     await kupmios.waitTxConfirmation( deployTx.hash.toString() );
     //*/
+
+    console.log(
+        JSON.stringify(
+            tx.toJson(),
+            undefined,
+            4
+        )
+    );
+    console.log( "\n" );
+    console.log( "genesis tx:", txHash );
+    console.log( "deploy tx:", deployTx.hash.toString() );
 
     kupmios.close();
 }()
@@ -302,12 +316,23 @@ async function writeTempuraGenesis(
                 bootstrapHash: toHex( bootstrapHash ),
                 datum: dataToCbor( datum ).toString(),
                 txHash,
-                utxoRef: utxoRef.toJson(),
-                deployedRefScript: deployedRefScript.toJson()
+                parameterUtxoRef: utxoRef.toJson(),
+                deployedScriptUtxoRef: deployedRefScript.toJson()
             },
             undefined,
             4
         ),
         { encoding: "utf8" }
     );
+}
+
+async function waitSlot( blockfrost: BlockfrostPluts, slotNo: number ): Promise<void>
+{
+    while( true )
+    {
+        const tipSlot = (await blockfrost.api.blocksLatest()).slot ?? 0;
+        if( tipSlot < slotNo )
+        await new Promise( r => setTimeout(r, (2 + slotNo - tipSlot) * 1000 ))
+        else return;
+    }
 }

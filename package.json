@@ -54,7 +54,7 @@
         "@harmoniclabs/cbor": "^1.1.2",
         "@harmoniclabs/crypto": "^0.1.0",
         "@harmoniclabs/obj-utils": "^1.0.0",
-        "@harmoniclabs/plu-ts": "^0.5.4",
+        "@harmoniclabs/plu-ts": "^0.5.5",
         "@harmoniclabs/uint8array-utils": "^1.0.0",
         "dotenv": "^16.3.1",
         "ws": "^8.13.0"
