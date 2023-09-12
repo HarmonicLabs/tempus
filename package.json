@@ -16,7 +16,8 @@
         "ci": "npm run test && npm run build",
         "start": "npm run build && node dist/miner/index.js mine",
         "genesis": "npm run build && node dist/scripts/genesis.js",
-        "mine": "npm run build && node dist/miner/index.js"
+        "mine": "npm run build && node dist/miner/index.js",
+        "genPrivateKey": "npm run build && node dist/scripts/genPrivateKey.js"
     },
     "publishConfig": {
         "registry": "https://registry.npmjs.org"

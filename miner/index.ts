@@ -26,7 +26,7 @@ type GenesisFile = {
 
 async function main()
 {
-    const cfg = await tryGetValidMinerConfig();
+    const cfg = await tryGetValidMinerConfig( process.argv[2] );
 
     console.log( "Running miner with config: ", JSON.stringify( cfg, undefined, 4 ) + "\n" );
 

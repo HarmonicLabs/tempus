@@ -12,7 +12,6 @@ export type MinerConfig = {
     readonly network: "preview" | "mainnet",
     readonly blockfrost_api_key: string,
     readonly kupo_url: string,
-    readonly ogmios_url: string,
     readonly path_to_miner_private_key: string,
     readonly change_address?: string | null
 }
@@ -21,7 +20,6 @@ export type ValidatedMinerConfig = {
     readonly network: "preview" | "mainnet",
     readonly blockfrost_api_key: string,
     readonly kupo_url: string,
-    readonly ogmios_url: string,
     readonly path_to_miner_private_key: string,
     readonly change_address: AddressStr,
     // only to keep track of the validation in the type
@@ -71,7 +69,6 @@ export async function parseMinerConfig( path?: string ): Promise<MinerConfig>
             void dotenv_config(), // comma operator for side effects
             {
                 kupo_url: process.env.KUPO_URL ?? "",
-                ogmios_url: process.env.OGMIOS_URL ?? "",
                 path_to_miner_private_key: process.env.MINER_PRIVATE_KEY_PATH ?? "",
                 change_address: process.env.CHANGE_ADDRESS,
                 network: tryGetMinerNetworkFromEnv()
@@ -107,9 +104,6 @@ export function isValidMinerConfig( cfg: MinerConfig ): cfg is ValidatedMinerCon
         
         typeof cfg.kupo_url === "string" &&
         cfg.kupo_url.startsWith("https://") &&
-
-        typeof cfg.ogmios_url === "string" &&
-        cfg.ogmios_url.startsWith("wss://") &&
 
         isValidPath( cfg.path_to_miner_private_key ) &&
         existsSync( cfg.path_to_miner_private_key ) &&
