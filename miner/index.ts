@@ -3,7 +3,7 @@ import { tryGetValidMinerConfig } from "./config";
 import { KupmiosPluts } from "../kupmios-pluts";
 import { readFile } from "fs/promises";
 import { fromAscii, fromHex, toHex } from "@harmoniclabs/uint8array-utils";
-import { createHash } from "crypto";
+import { createHash, webcrypto } from "crypto";
 import { calculateDifficultyNumber, calculateInterlink, getDifficulty, getDifficultyAdjustement, incrementU8Array } from "./utils";
 import { BlockfrostPluts } from "@harmoniclabs/blockfrost-pluts";
 
@@ -121,7 +121,7 @@ async function main()
     
         let nonce = new Uint8Array( 16 );
     
-        crypto.getRandomValues( nonce );
+        webcrypto.getRandomValues( nonce );
 
         let targetState = dataToCbor(
             new DataConstr(
@@ -221,7 +221,7 @@ async function main()
 
             // console.log( toHex( nonce ), toHex( targetHash ) )
 
-            difficulty = getDifficulty(targetHash);
+            difficulty = getDifficulty( targetHash );
             const { leadingZeros, difficulty_number } = difficulty;
 
             // if found hash break
@@ -285,7 +285,7 @@ async function main()
                 new DataI(
                     (state.fields[0] as DataI).int + BigInt(1)
                 ),
-                new DataB(targetHash),
+                new DataB( targetHash ),
                 new DataI( leading_zeros ),
                 new DataI( difficulty_number ),
                 new DataI( epoch_time ),

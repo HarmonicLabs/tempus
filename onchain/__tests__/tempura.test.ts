@@ -3,7 +3,7 @@ import { Redeemer, tempura } from "../tempura";
 
 describe("tempura", () => {
 
-    test("mine", () => {
+    test("mine 0", () => {
 
         const contract = tempura.$(
             PTxOutRef.fromData(
@@ -42,5 +42,39 @@ describe("tempura", () => {
 
         expect( res.result instanceof UPLCConst ).toBe( true );
         expect( res.result ).toEqual( UPLCConst.unit );
+    });
+
+    test.skip("mine 1", () => {
+
+        const contract = tempura.$(
+            PTxOutRef.fromData(
+                pData(
+                    new TxOutRef({
+                        "id": "1cd30f11c3d774fa1cb43620810a405e6048c8ecea2e85ff43f5c3ad08096e46",
+                        "index": 1
+                    }).toData()
+                )
+            )
+        );
+
+        const datumData = dataFromCbor("d8799f005820260139cebfa78d9b75b9df5d906d827d13dfd632e6cb2ef2c709fe23ed8128ec0519ffff001b0000018a89e1877c0080ff");
+        const rdmrData  = dataFromCbor("d87a9f503e8705789654a9a17fd08a91489591a4ff");
+        const ctxData   = dataFromCbor(
+            "8799fd8799f9fd8799fd8799fd8799f58202b5d1a4b36d928da9a48c53a1013656e559db63f1ec86c9673e1839e2b7999efff00ffd8799fd8799fd87a9f581c5d652c25b0a04ee11d00268e396520bff6171569ec2c71d541e366a5ffd87a80ffbf40bf401a001898f4ff581c5d652c25b0a04ee11d00268e396520bff6171569ec2c71d541e366a5bf466974616d616501ffffd87b9fd8799f005820260139cebfa78d9b75b9df5d906d827d13dfd632e6cb2ef2c709fe23ed8128ec0519ffff001b0000018a89e1877c0080ffffd87a80ffffd8799fd8799fd8799f58202576dbe880b051a3e630605c315f291c9d0ad4de100ec8ffd11e0031cd3ca9a9ff01ffd8799fd8799fd8799f581c13867b04db054caa9655378fe37fedee7029924fbe1243887dc35fd8ffd87a80ffbf40bf401b000000024d56e117ffffd87980d87a80ffffff9fd8799fd8799fd8799f58202576dbe880b051a3e630605c315f291c9d0ad4de100ec8ffd11e0031cd3ca9a9ff00ffd8799fd8799fd87a9f581c5d652c25b0a04ee11d00268e396520bff6171569ec2c71d541e366a5ffd87a80ffbf40bf401a00f6afeaffffd87b9f00ffd8799f581c5d652c25b0a04ee11d00268e396520bff6171569ec2c71d541e366a5ffffffd8799fd8799fd8799f58202576dbe880b051a3e630605c315f291c9d0ad4de100ec8ffd11e0031cd3ca9a9ff00ffd8799fd8799fd87a9f581c5d652c25b0a04ee11d00268e396520bff6171569ec2c71d541e366a5ffd87a80ffbf40bf401a00f6afeaffffd87b9f00ffd8799f581c5d652c25b0a04ee11d00268e396520bff6171569ec2c71d541e366a5ffffffff9fd8799fd8799fd87a9f581c5d652c25b0a04ee11d00268e396520bff6171569ec2c71d541e366a5ffd87a80ffbf40bf401a001898f4ff581c5d652c25b0a04ee11d00268e396520bff6171569ec2c71d541e366a5bf466974616d616501ffffd87b9fd8799f015820000008e2add4952826b1aac45abdd431af1e96bfe4d0b06dc9fed63c434b1a8b05193fff001b0000018a89e6a6080080ffffd87a80ffd8799fd8799fd8799f581c13867b04db054caa9655378fe37fedee7029924fbe1243887dc35fd8ffd87a80ffbf40bf401b000000024d5408caff581c5d652c25b0a04ee11d00268e396520bff6171569ec2c71d541e366a5bf4754454d505552411b000000012a05f200ffffd87980d87a80ffffbf40bf401a0002d84dffffbf40bf4000ff581c5d652c25b0a04ee11d00268e396520bff6171569ec2c71d541e366a5bf4754454d505552411b000000012a05f200ffff80a0d8799fd8799fd87a9f1b0000018a89e54678ffd87980ffd8799fd87a9f1b0000018a89e80598ffd87980ffff80bfd87a9fd8799fd8799f58202b5d1a4b36d928da9a48c53a1013656e559db63f1ec86c9673e1839e2b7999efff00ffffd87a9f503e8705789654a9a17fd08a91489591a4ffd8799f581c5d652c25b0a04ee11d00268e396520bff6171569ec2c71d541e366a5ffd87980ffa05820df29bc4cbf7ef15500c3af7b157d8f96303d6a47aa4c05bff63f590fe98c8738ffd87a9fd8799fd8799f58202b5d1a4b36d928da9a48c53a1013656e559db63f1ec86c9673e1839e2b7999efff00ffffff"
+        );
+
+        const res = Machine.eval(
+            punsafeConvertType(
+                contract
+                .$( pData( datumData ) )
+                .$( Redeemer.fromData( pData( rdmrData ) ) ),
+                lam( data, unit )
+            )
+            .$( pData( ctxData ) )
+        );
+
+        expect( res.result instanceof UPLCConst ).toBe( true );
+        expect( res.result ).toEqual( UPLCConst.unit );
     })
+
 })

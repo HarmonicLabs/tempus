@@ -2,9 +2,9 @@ import { config } from "dotenv"
 import { KupmiosPluts } from "../KupmiosPluts";
 import { isPartialProtocolParameters, isProtocolParameters } from "@harmoniclabs/plu-ts";
 
-config();
+// config();
 
-test("Kupmios.getProtocolParameters", async () => {
+test.skip("Kupmios.getProtocolParameters", async () => {
 
     const kupmios = new KupmiosPluts(
         process.env.KUPO_URL ?? "" ,

@@ -186,12 +186,10 @@ export const get_difficulty_adjustment = phoist(
         .$(
             epoch_target.div( tot_epoch_time ).gtEq( 4 )
             .and(
-                tot_epoch_time.mod( epoch_target ).gt( 0 )
+                epoch_target.mod( tot_epoch_time ).gt( 0 )
             )
         )
-        .then(
-            pListPairInt([ 1, 4 ])
-        )
+        .then( pListPairInt([ 1, 4 ]) )
         .else(
 
             pif( list( int ) )
@@ -201,9 +199,7 @@ export const get_difficulty_adjustment = phoist(
                     tot_epoch_time.mod( epoch_target ).gt( 0 )
                 )
             )
-            .then(
-                pListPairInt([ 4, 1 ])
-            )
+            .then( pListPairInt([ 4, 1 ]) )
             .else(
                 pListPairInt([ tot_epoch_time, epoch_target ])
             )

@@ -113,24 +113,24 @@ export function getDifficultyAdjustement(
   epoch_target: bigint,
 ): { numerator: bigint; denominator: bigint } {
     if (
-        epoch_target / total_epoch_time >= 4 && epoch_target % total_epoch_time > 0
-    ) {
-        return { numerator: BigInt( 1 ), denominator: BigInt( 4 ) };
-    } else if (
-        total_epoch_time / epoch_target >= 4 && total_epoch_time % epoch_target > 0
-    ) {
-        return { numerator: BigInt( 4 ), denominator: BigInt( 1 ) };
-    } else {
-        return { numerator: total_epoch_time, denominator: epoch_target };
-    }
+        epoch_target / total_epoch_time >= 4 && 
+        epoch_target % total_epoch_time > 0
+    ) return { numerator: BigInt( 1 ), denominator: BigInt( 4 ) };
+    
+    else if (
+        total_epoch_time / epoch_target >= 4 &&
+        total_epoch_time % epoch_target > 0
+    ) return { numerator: BigInt( 4 ), denominator: BigInt( 1 ) };
+    
+    else return { numerator: total_epoch_time, denominator: epoch_target };
 }
 
 export function calculateDifficultyNumber(
     a: { leadingZeros: bigint; difficulty_number: bigint },
     numerator: bigint,
     denominator: bigint,
-  ): { leadingZeros: bigint; difficulty_number: bigint } {
-    
+  ): { leadingZeros: bigint; difficulty_number: bigint }
+{
     const n16 = BigInt(16);
     const n62 = BigInt(62);
     const n4096 = BigInt(4096);
@@ -138,33 +138,48 @@ export function calculateDifficultyNumber(
     const n65536 = BigInt(65536);
     const n65535 = BigInt(65535);
 
-    const new_padded_difficulty = a.difficulty_number * n16 * numerator /
-    denominator;
+    const padding = n16;
 
-    const new_difficulty = new_padded_difficulty / n16;
+    const {
+        difficulty_number: difficulty_num,
+        leadingZeros: curr_leading_zeros
+    } = a;
 
-    if (new_padded_difficulty / n65536 == n0) {
-        if (a.leadingZeros >= 62) {
+    const new_padded_difficulty =
+        (difficulty_num * padding * numerator) / denominator;
+
+    const new_difficulty = new_padded_difficulty / padding;
+
+    if( new_padded_difficulty / n65536 == n0 )
+    {
+        if (curr_leading_zeros >= 62) {
             return { difficulty_number: n4096, leadingZeros: n62 };
         } else {
             return {
-            difficulty_number: new_padded_difficulty,
-            leadingZeros: a.leadingZeros + BigInt( 1 ),
+                difficulty_number: new_padded_difficulty,
+                leadingZeros: curr_leading_zeros + BigInt( 1 ),
             };
         }   
-    } else if (new_difficulty / n65536 > n0) {
-        if (a.leadingZeros <= 2) {
+    }
+    else if( new_difficulty / n65536 > n0 )
+    {
+        if( curr_leading_zeros <= 2 )
+        {
             return { difficulty_number: n65535, leadingZeros: BigInt(2) };
-        } else {
+        }
+        else
+        {
             return {
-            difficulty_number: new_difficulty / n16,
-            leadingZeros: a.leadingZeros - BigInt(1),
+                difficulty_number: new_difficulty / n16,
+                leadingZeros: curr_leading_zeros - BigInt(1),
             };
         }
-        } else {
+    }
+    else
+    {
         return {
             difficulty_number: new_difficulty,
-            leadingZeros: a.leadingZeros,
+            leadingZeros: curr_leading_zeros,
         };
     }
 }  
