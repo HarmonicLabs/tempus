@@ -1,4 +1,4 @@
-import { PAssetsEntry, PCredential, PData, PScriptContext, PScriptPurpose, PTxInfo, PTxOut, PTxOutRef, PUnit, Term, TermFn, TermList, bool, bs, data, int, list, pBSToData, pDataI, pDataList, pIntToData, pListToData, pStr, palias, pdelay, peqData, perror, pfn, phoist, pif, pisEmpty, plam, plet, pmakeUnit, pmatch, pnilData, pserialiseData, psha2_256, pstruct, psub, ptrace, ptraceError, ptraceIfFalse, ptraceVal, punBData, punsafeConvertType, str, unit } from "@harmoniclabs/plu-ts";
+import { PAssetsEntry, PCredential, PData, PExtended, PScriptContext, PScriptPurpose, PTxInfo, PTxOut, PTxOutRef, PUnit, Term, TermFn, TermList, bool, bs, data, int, list, pBSToData, pDataI, pDataList, pIntToData, pListToData, pStr, palias, pdelay, peqData, perror, pfn, phoist, pif, pisEmpty, plam, plet, pmakeUnit, pmatch, pnilData, pserialiseData, psha2_256, pstruct, psub, ptrace, ptraceError, ptraceIfFalse, ptraceVal, punBData, punIData, punsafeConvertType, str, unit } from "@harmoniclabs/plu-ts";
 import { epoch_number, exp2, format_found_bytearray, get_new_difficulty, get_difficulty_adjustment, halving_number, initial_payout, master_tn, tn, value_contains_master, value_has_only_master_and_lovelaces, calculate_interlink } from "./tempus";
 
 
@@ -73,6 +73,17 @@ function accessConstIdx( term: TermList<PData>, idx: number ): Term<PData>
 
     return term.head;
 }
+
+const pgetFinite = phoist(
+    pfn([
+        PExtended.type
+    ], int)
+    ( extended =>
+        pmatch( extended )
+        .onPFinite(({ _0 }) => _0)
+        ._( _ => perror( int ) )
+    )
+);
 
 export const tempura
     // typescript wants us to specify the type if we export
@@ -219,120 +230,114 @@ export const tempura
     })
     // spending validator
     .onInputNonce(({ nonce }) =>
-        punsafeConvertType(
-            plam( PScriptContext.type, unit )
-            (({ tx, purpose }) => {
-                
-                const state = punsafeConvertType( _state, SpendingState.type );
+    punsafeConvertType(
+        plam( PScriptContext.type, unit )
+        (({ tx, purpose }) => {
+            
+            const state = punsafeConvertType( _state, SpendingState.type );
 
-                const {
-                    block_number,
-                    current_hash,
-                    leading_zeros,
-                    difficulty_number,
-                    epoch_time,
-                    current_posix_time,
-                    interlink
-                } = state;
+            const {
+                block_number,
+                current_hash,
+                leading_zeros,
+                difficulty_number,
+                epoch_time,
+                current_posix_time,
+                interlink
+            } = state;
 
-                const spendingUtxoRef = plet(
-                    pmatch( purpose )
-                    .onSpending(({ utxoRef }) => utxoRef )
-                    ._( _ => perror( PTxOutRef.type ) )
-                );
+            const spendingUtxoRef = plet(
+                pmatch( purpose )
+                .onSpending(({ utxoRef }) => utxoRef )
+                ._( _ => perror( PTxOutRef.type ) )
+            );
 
-                const { inputs: ins, outputs: outs, mint, interval } = tx;
+            const { inputs: ins, outputs: outs, mint, interval } = tx;
 
-                const ownIn = plet(
-                    pmatch(
-                        ins.find( i => i.utxoRef.eq( spendingUtxoRef ) )
-                    )
-                    .onJust(({ val }) => val.resolved )
-                    .onNothing( _ => perror( PTxOut.type ) )
-                );
+            const ownIn = plet(
+                pmatch(
+                    ins.find( i => i.utxoRef.eq( spendingUtxoRef ) )
+                )
+                .onJust(({ val }) => val.resolved )
+                .onNothing( _ => perror( PTxOut.type ) )
+            );
 
-                const own_validator_hash = plet(
-                    punBData.$( ownIn.address.credential.raw.fields.head )
-                );
+            const own_validator_hash = plet(
+                punBData.$( ownIn.address.credential.raw.fields.head )
+            );
 
-                const ownOuts = plet(
-                    outs.filter( out => out.address.eq( ownIn.address ) )
-                );
+            const ownOuts = plet(
+                outs.filter( out => out.address.eq( ownIn.address ) )
+            );
 
-                // inlined
-                // Spend(0) requirement: Contract has only one output going back to itself
-                const singleOutToSelf = pisEmpty.$( ownOuts.tail );
+            // inlined
+            // Spend(0) requirement: Contract has only one output going back to itself
+            const singleOutToSelf = pisEmpty.$( ownOuts.tail );
 
-                const ownOut = plet( ownOuts.head );
+            const ownOut = plet( ownOuts.head );
 
-                // inlined
-                const upper_range = 
-                pmatch( interval.to.bound )
-                .onPFinite(({ _0 }) => _0 )
-                ._( _ => perror( int ) )
+            // inlined
+            const upper_range = pgetFinite.$( interval.to.bound );
 
-                const lower_range = plet(
-                    pmatch( interval.from.bound )
-                    .onPFinite(({ _0 }) => _0 )
-                    ._ (  _ => perror( int ) )
-                );
+            const lower_range = pgetFinite.$( interval.from.bound );
 
-                const time_diff = plet(
-                    psub
-                    .$( upper_range )
-                    .$( lower_range )
-                );
+            const time_diff =
+            // plet(
+                psub
+                .$( upper_range )
+                .$( lower_range )
+            // );
 
-                // inlined
-                // Spend(1) requirement: Time range span is 3 minutes or less and inclusive
-                const timerangeIn3Mins = time_diff.lt( 180_000 );
+            // inlined
+            // Spend(1) requirement: Time range span is 3 minutes or less and inclusive
+            const timerangeIn3Mins = time_diff.ltEq( 180_000 );
 
-                // inlined
-                const averaged_current_time = time_diff.div( 2 ).add( lower_range );
+            // inlined
+            const averaged_current_time = time_diff.div( 2 ).add( lower_range );
 
-                /*
-                SpendingState: {
-                    0: block_number: int,
-                    1: current_hash: bs,
-                    2: leading_zeros: int,
-                    3: difficulty_number: int,
-                    4: epoch_time: int,
-                    5: current_posix_time: int,
-                    6: extra: data,
-                    7: interlink: list( data )
-                }
-                */
-               // inlined
-                const target_state = // plet(
-                    TargetState.TargetState({
-                        nonce: rdmr.raw.fields.head,
-                        epoch_time: accessConstIdx( state.raw.fields, 4 ),
-                        block_number: accessConstIdx( state.raw.fields, 0 ),
-                        current_hash: accessConstIdx( state.raw.fields, 1 ),
-                        leading_zeros: accessConstIdx( state.raw.fields, 2 ),
-                        difficulty_number: accessConstIdx( state.raw.fields, 3 ),
-                    })
-                // );
+            /*
+            SpendingState: {
+                0: block_number: int,
+                1: current_hash: bs,
+                2: leading_zeros: int,
+                3: difficulty_number: int,
+                4: epoch_time: int,
+                5: current_posix_time: int,
+                6: extra: data,
+                7: interlink: list( data )
+            }
+            */
+           // inlined
+            const target_state = // plet(
+                TargetState.TargetState({
+                    nonce: rdmr.raw.fields.head,
+                    epoch_time: accessConstIdx( state.raw.fields, 4 ),
+                    block_number: accessConstIdx( state.raw.fields, 0 ),
+                    current_hash: accessConstIdx( state.raw.fields, 1 ),
+                    leading_zeros: accessConstIdx( state.raw.fields, 2 ),
+                    difficulty_number: accessConstIdx( state.raw.fields, 3 ),
+                })
+            // );
 
-                const found_bytearray = plet(
+            const found_bytearray = plet(
+                psha2_256.$(
                     psha2_256.$(
-                        psha2_256.$(
-                            pserialiseData.$(
-                                punsafeConvertType( target_state, data )
-                            )
-                        ) 
-                    )
-                );
+                        pserialiseData.$(
+                            punsafeConvertType( target_state, data )
+                        )
+                    ) 
+                )
+            );
 
-                const formatted = format_found_bytearray.$( found_bytearray );
+            const formatted = format_found_bytearray.$( found_bytearray );
 
-                const found_difficulty_num = plet( formatted.head );
-                const found_leading_zeros = plet( formatted.tail.head );
+            const found_difficulty_num = formatted.head;
+            const found_leading_zeros  = formatted.tail.head;
 
-                // inlined
-                // Spend(2) requirement: Found difficulty is less than or equal to the current difficulty
-                // We do this by checking the leading zeros and the difficulty number
-                const meetsDifficulty = found_leading_zeros.gt( leading_zeros )
+            // inlined
+            // Spend(2) requirement: Found difficulty is less than or equal to the current difficulty
+            // We do this by checking the leading zeros and the difficulty number
+            const meetsDifficulty = found_leading_zeros.gt( leading_zeros )
                 .or(
                     found_leading_zeros.eq( leading_zeros )
                     .and(
@@ -340,21 +345,22 @@ export const tempura
                     )
                 );
 
-                // inlined
-                // Spend(3) requirement: Input has master token
-                const inputHasMasterToken = ownIn.value.amountOf( own_validator_hash as any, master_tn as any ).eq( 1 );
+            // inlined
+            // Spend(3) requirement: Input has master token
+            const inputHasMasterToken = value_contains_master.$( ownIn.value ).$( own_validator_hash );
+            // ownIn.value.amountOf( own_validator_hash, master_tn ).eq( 1 );
 
-                const ownMints = plet(
-                    pmatch(
-                        mint.find(({ policy }) => policy.eq( own_validator_hash ) )
-                    )
-                    .onJust(({ val }) => val.snd )
-                    .onNothing( _ => perror( list( PAssetsEntry.type ) ) )
-                );
+            const correctMint = plet(
+                pmatch(
+                    mint.find(({ fst: policy }) => policy.eq( own_validator_hash ))
+                )
+                .onJust(({ val }) => val.snd )
+                .onNothing( _ => perror( list( PAssetsEntry.type ) ) )
+            ).in( ownMints => {
 
-                // inlined
-                // Spend(4) requirement: Only one type of token minted under the validator policy
-                const singleMintEntry = pisEmpty.$( ownMints.tail );
+                // // inlined
+                // // Spend(4) requirement: Only one type of token minted under the validator policy
+                // const singleMintEntry = pisEmpty.$( ownMints.tail );
 
                 const { fst: ownMint_tn, snd: ownMint_qty } = ownMints.head;
 
@@ -370,127 +376,185 @@ export const tempura
 
                 // inlined
                 // Spend(5) requirement: Minted token is the correct name and amount
-                const correctMint = ownMint_tn.eq( tn ).and( ownMint_qty.eq( expected_quantity ) )
+                const _correctMint = ownMint_tn.eq( tn ).and( ownMint_qty.eq( expected_quantity ) );
 
-                // inlined
-                // Spend(6) requirement: Output has only master token and ada
-                const outHasOnlyMaster = value_contains_master.$( ownOut.value ).$( own_validator_hash );
+                return ownMint_tn.eq( tn ).and( ownMint_qty.eq( expected_quantity ) );
+            })
 
-                // Check output datum contains correct epoch time, block number, hash, and leading zeros
-                // Check for every divisible by 2016 block: 
-                // - Epoch time resets
-                // - leading zeros is adjusted based on percent of hardcoded target time for 2016 blocks vs epoch time
-                const out_datum = plet(
-                    pmatch( ownOut.datum )
-                    .onInlineDatum(({ datum }) => punsafeConvertType( datum, SpendingState.type) )
-                    ._( _ => perror( SpendingState.type ) )
-                );
+            const ownMints = plet(
+                pmatch(
+                    mint.find(({ fst: policy }) => policy.eq( own_validator_hash ))
+                )
+                .onJust(({ val }) => val.snd )
+                .onNothing( _ => perror( list( PAssetsEntry.type ) ) )
+            );
 
-                // Spend(7) requirement: Expect Output Datum to be of type State
-                // (implicit: fails field extraction if it is not)
-                const {
-                    block_number: out_block_number,
-                    current_hash: out_current_hash,
-                    leading_zeros: out_leading_zeros,
-                    epoch_time: out_epoch_time,
-                    current_posix_time: out_current_posix_time,
-                    // interlink: out_interlink,
-                    extra,
-                    difficulty_number: out_difficulty_number
-                } = out_datum;
+            // inlined
+            // Spend(4) requirement: Only one type of token minted under the validator policy
+            const singleMintEntry = pisEmpty.$( ownMints.tail );
 
-                // inlined
-                const tot_epoch_time =
-                    epoch_time
-                    .add( averaged_current_time )
-                    .sub( current_posix_time );
+            // const { fst: ownMint_tn, snd: ownMint_qty } = ownMints.head;
 
-                const diff_adjustment = plet(
-                    get_difficulty_adjustment.$( tot_epoch_time )
-                );
+            // const halving_exponent = plet( block_number.div( halving_number ) );
 
-                const adjustment_num = diff_adjustment.head;
-                const adjustment_den = diff_adjustment.tail.head;
+            // // inlined
+            // const expected_quantity =
+            //     pif( int ).$( halving_exponent.gt( 29 ) )
+            //     .then( 0 )
+            //     .else(
+            //         initial_payout.div( exp2.$( halving_exponent ) )
+            //     );
+            
+            // // inlined
+            // // Spend(5) requirement: Minted token is the correct name and amount
+            // const _correctMint = ownMint_tn.eq( tn ).and( ownMint_qty.eq( expected_quantity ) )
 
-                const new_diff = plet(
-                    get_new_difficulty
-                    .$( difficulty_number )
-                    .$( leading_zeros )
-                    .$( adjustment_num )
-                    .$( adjustment_den )
-                );
+            // inlined
+            // Spend(6) requirement: Output has only master token and ada
+            const outHasOnlyMaster = value_contains_master.$( ownOut.value ).$( own_validator_hash );
 
-                const new_difficulty = new_diff.head;
+            // Check output datum contains correct epoch time, block number, hash, and leading zeros
+            // Check for every divisible by 2016 block: 
+            // - Epoch time resets
+            // - leading zeros is adjusted based on percent of hardcoded target time for 2016 blocks vs epoch time
+            const out_state = plet(
+                pmatch( ownOut.datum )
+                .onInlineDatum(({ datum }) => punsafeConvertType( datum, SpendingState.type) )
+                ._( _ => perror( SpendingState.type ) )
+            );
+
+            // Spend(7) requirement: Expect Output Datum to be of type State
+            // (implicit: fails field extraction if it is not)
+            const {
+                block_number: out_block_number,
+                current_hash: out_current_hash,
+                leading_zeros: out_leading_zeros,
+                epoch_time: out_epoch_time,
+                current_posix_time: out_current_posix_time,
+                // interlink: out_interlink,
+                extra,
+                difficulty_number: out_difficulty_number
+            } = out_state;
+
+            // inlined
+            const tot_epoch_time =
+                epoch_time
+                .add( averaged_current_time )
+                .sub( current_posix_time );
+
+            const diff_adjustment = plet(
+                get_difficulty_adjustment.$( tot_epoch_time )
+            );
+
+            const adjustment_num = diff_adjustment.head;
+            const adjustment_den = diff_adjustment.tail.head;
+
+            // const new_diff = plet(
+            //     get_new_difficulty
+            //     .$( difficulty_number )
+            //     .$( leading_zeros )
+            //     .$( adjustment_num )
+            //     .$( adjustment_den )
+            // );
+// 
+            // const new_difficulty    = new_diff.head;
+            // const new_leading_zeros = new_diff.tail.head;
+// 
+            // // inlined
+            // const new_epoch_time = epoch_time.add( averaged_current_time ).sub( current_posix_time );
+
+            // inlined
+            // Spend(8) requirement: Check output has correct difficulty number, leading zeros, and epoch time
+            const correctOutDatum = plet(
+                get_new_difficulty
+                .$( difficulty_number )
+                .$( leading_zeros )
+                .$( adjustment_num )
+                .$( adjustment_den )
+            ).in( new_diff => {
+
+                const new_difficulty    = new_diff.head;
                 const new_leading_zeros = new_diff.tail.head;
 
                 // inlined
                 const new_epoch_time = epoch_time.add( averaged_current_time ).sub( current_posix_time );
 
-                // inlined
-                // Spend(8) requirement: Check output has correct difficulty number, leading zeros, and epoch time
-                const correctOutDatum = 
-                new_leading_zeros.eq( out_leading_zeros )
-                .and( new_difficulty.eq( out_difficulty_number ) )
-                .and(
-                    out_epoch_time.eq(
-                        pif( int ).$(
-                            block_number.mod( epoch_number ).eq( 0 )
-                            .and( block_number.gt( 0 ) )
-                        )
-                        .then( 0 )
-                        .else( new_epoch_time )
-                    )
-                );
+                return plet( out_state.raw.fields ).in( outStateFields => {
 
-                return passert.$(
-                    // Spend(0) requirement: Contract has only one output going back to itself
-                    singleOutToSelf
-                    // Spend(1) requirement: Time range span is 3 minutes or less and inclusive
-                    .and( timerangeIn3Mins )
-                    // Spend(2) requirement: Found difficulty is less than or equal to the current difficulty
-                    .and( meetsDifficulty )
-                    // Spend(3) requirement: Input has master token
-                    .and( inputHasMasterToken )
-                    // Spend(4) requirement: Only one type of token minted under the validator policy
-                    .and( singleMintEntry )
-                    // Spend(5) requirement: Minted token is the correct name and amount
-                    .and( correctMint )
-                    // Spend(6) requirement: Output has only master token and ada
-                    .and( outHasOnlyMaster )
-                    // Spend(7) requirement: Expect Output Datum to be of type State
-                    // (implicit: fails field extraction if it is not)
-                    // Spend(8) requirement: Check output has correct difficulty number, leading zeros, and epoch time
-                    .and( correctOutDatum )
-                    // Spend(9) requirement: Output posix time is the averaged current time
-                    .and( out_current_posix_time.eq( averaged_current_time ) )
-                    // Spend(10) requirement: Output block number is the input block number + 1 
-                    .and( out_block_number.eq( block_number.add( 1 ) ) )
-                    // Spend(11) requirement: Output current hash is the target hash
-                    .and( out_current_hash.eq( found_bytearray ) )
-                    //Spend(12) requirement: Check output extra field is within a certain size
-                    .and( pserialiseData.$( extra ).length.ltEq( 512 ) )
-                    // Spend(13) requirement: Check output interlink is correct
+                    const out_leading_zeros = punIData.$(
+                        accessConstIdx( outStateFields, 2 )
+                    );
+                    const out_difficulty_number = punIData.$(
+                        accessConstIdx( outStateFields, 3 )
+                    );
+                    const out_epoch_time = punIData.$(
+                        accessConstIdx( outStateFields, 4 )
+                    );
+
+                    return new_leading_zeros.eq( out_leading_zeros )
+                    .and( new_difficulty.eq( out_difficulty_number ) )
                     .and(
-                        peqData
-                        .$(
-                            // out_interlink
-                            accessConstIdx( state.raw.fields, 7 )
-                        )
-                        .$(
-                            pListToData.$(
-                                calculate_interlink
-                                .$( interlink )
-                                .$( pBSToData.$( found_bytearray ) )
-                                .$( found_leading_zeros )
-                                .$( found_difficulty_num )
-                                .$( difficulty_number )
-                                .$( leading_zeros )
+                        out_epoch_time.eq(
+                            pif( int ).$(
+                                block_number.mod( epoch_number ).eq( 0 )
+                                .and( block_number.gt( 0 ) )
                             )
+                            .then( 0 )
+                            .else( new_epoch_time )
+                        )
+                    );
+                });
+            });
+
+            return passert.$(
+                // Spend(0) requirement: Contract has only one output going back to itself
+                singleOutToSelf
+                // Spend(1) requirement: Time range span is 3 minutes or less and inclusive
+                .and( timerangeIn3Mins )
+                // Spend(2) requirement: Found difficulty is less than or equal to the current difficulty
+                .and( meetsDifficulty )
+                // Spend(3) requirement: Input has master token
+                .and( inputHasMasterToken )
+                // Spend(4) requirement: Only one type of token minted under the validator policy
+                .and( singleMintEntry )
+                // Spend(5) requirement: Minted token is the correct name and amount
+                .and( correctMint )
+                // Spend(6) requirement: Output has only master token and ada
+                .and( outHasOnlyMaster )
+                // Spend(7) requirement: Expect Output Datum to be of type State
+                // (implicit: fails field extraction if it is not)
+                // Spend(8) requirement: Check output has correct difficulty number, leading zeros, and epoch time
+                .and( correctOutDatum )
+                // Spend(9) requirement: Output posix time is the averaged current time
+                .and( out_current_posix_time.eq( averaged_current_time ) )
+                // Spend(10) requirement: Output block number is the input block number + 1 
+                .and( out_block_number.eq( block_number.add( 1 ) ) )
+                // Spend(11) requirement: Output current hash is the target hash
+                .and( out_current_hash.eq( found_bytearray ) )
+                // Spend(12) requirement: Check output extra field is within a certain size
+                .and( pserialiseData.$( extra ).length.ltEq( 512 ) )
+                // Spend(13) requirement: Check output interlink is correct
+                .and(
+                    peqData
+                    .$(
+                        // out_interlink
+                        accessConstIdx( state.raw.fields, 7 )
+                    )
+                    .$(
+                        pListToData.$(
+                            calculate_interlink
+                            .$( interlink )
+                            .$( pBSToData.$( found_bytearray ) )
+                            .$( found_leading_zeros )
+                            .$( found_difficulty_num )
+                            .$( difficulty_number )
+                            .$( leading_zeros )
                         )
                     )
-                );
-            }),
-            unit
-        )
+                )
+            );
+        }),
+        unit
+    )
     )
 );
