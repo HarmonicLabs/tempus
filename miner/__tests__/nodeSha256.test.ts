@@ -1,6 +1,7 @@
 import { sha2_256 } from "@harmoniclabs/crypto"
 import { fromAscii, fromUtf8, toHex } from "@harmoniclabs/uint8array-utils"
 import { nodeSha256 } from "..";
+import { webcrypto } from "crypto";
 
 describe("nodeSha256", () => {
 
@@ -29,7 +30,7 @@ describe("nodeSha256", () => {
     const bytes = new Uint8Array( 64 );
     for( let i = 0; i < 10; i++ )
     {
-        crypto.getRandomValues( bytes );
+        webcrypto.getRandomValues( bytes );
         tst( bytes );
     }
 })

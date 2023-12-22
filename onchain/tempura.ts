@@ -491,8 +491,10 @@ export const tempura
                         accessConstIdx( outStateFields, 4 )
                     );
 
+                    const ptraceInt = ptraceVal( int );
+
                     return new_leading_zeros.eq( out_leading_zeros )
-                    .and( new_difficulty.eq( out_difficulty_number ) )
+                    .and( ptraceInt.$( new_difficulty ).eq( out_difficulty_number ) )
                     .and(
                         out_epoch_time.eq(
                             pif( int ).$(
