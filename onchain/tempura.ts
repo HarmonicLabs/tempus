@@ -1,5 +1,5 @@
-import { PAssetsEntry, PCredential, PData, PExtended, PScriptContext, PScriptPurpose, PTxInfo, PTxOut, PTxOutRef, PUnit, Term, TermFn, TermList, bool, bs, data, int, list, pBSToData, pDataI, pDataList, pIntToData, pListToData, pStr, palias, pdelay, peqData, perror, pfn, phoist, pif, pisEmpty, plam, plet, pmakeUnit, pmatch, pnilData, pserialiseData, psha2_256, pstruct, psub, ptrace, ptraceError, ptraceIfFalse, ptraceVal, punBData, punIData, punsafeConvertType, str, unit } from "@harmoniclabs/plu-ts";
-import { epoch_number, exp2, format_found_bytearray, get_new_difficulty, get_difficulty_adjustment, halving_number, initial_payout, master_tn, tn, value_contains_master, value_has_only_master_and_lovelaces, calculate_interlink } from "./tempus";
+import { PAssetsEntry, PCredential, PData, PExtended, PScriptContext, PScriptPurpose, PTxInfo, PTxOut, PTxOutRef, PUnit, Term, TermFn, TermList, bool, bs, data, int, list, pBSToData, pDataI, pIntToData, pListToData, peqData, perror, pfn, phoist, pif, pisEmpty, plam, plet, pmakeUnit, pmatch, pnilData, pserialiseData, psha2_256, pstruct, psub, punBData, punIData, punsafeConvertType, str, unit } from "@harmoniclabs/plu-ts";
+import { epoch_number, exp2, format_found_bytearray, get_new_difficulty, get_difficulty_adjustment, halving_number, initial_payout, tn, value_contains_master, calculate_interlink } from "./tempus";
 
 
 export const MintingState = pstruct({
@@ -50,16 +50,6 @@ const passert = phoist(
         .else( perror( unit ) )
     )
 );
-
-const passertOrTrace = phoist(
-    pfn([ bool, str] , unit )
-    ( (condition, msg) =>
-        pif( unit ).$( condition )
-        .then( pmakeUnit() )
-        .else( ptraceError( unit ).$( msg ) )
-    )
-);
-
 
 function accessConstIdx( term: TermList<PData>, idx: number ): Term<PData>
 {
@@ -117,16 +107,9 @@ export const tempura
             const { inputs: ins, outputs: outs, mint, interval } = tx;
 
             // inlined
-            const upper_range = 
-                pmatch( interval.to.bound )
-                .onPFinite(({ _0 }) => _0 )
-                ._ (  _ => perror( int ) )
+            const upper_range = pgetFinite.$( interval.to.bound )
 
-            const lower_range = plet(
-                pmatch( interval.from.bound )
-                .onPFinite(({ _0 }) => _0 )
-                ._ (  _ => perror( int ) )
-            );
+            const lower_range = plet( pgetFinite.$( interval.from.bound ) );
 
             const time_diff = plet(
                 psub
@@ -145,22 +128,23 @@ export const tempura
             // Mint(1) Genesis requirement: Contract has initial entropy hash. No need for difficulty check
             const spendsUtxoParam = ins.some( i => i.utxoRef.eq( utxoParam ) );
 
-            const bootstrap_hash = plet(
+            // used once; inlined
+            const bootstrap_hash = psha2_256.$(
                 psha2_256.$(
-                    psha2_256.$(
-                        pserialiseData.$(
-                            punsafeConvertType( utxoParam, data )
-                        )
-                    ) 
-                )
+                    pserialiseData.$(
+                        punsafeConvertType( utxoParam, data )
+                    )
+                ) 
             );
 
             const outsToSelf = plet(
-                outs.filter( out => 
-                    out.address.credential.eq( 
-                        PCredential.PScriptCredential({ 
-                            valHash: pBSToData.$( own_policy ) 
-                        })
+                plet(
+                    PCredential.PScriptCredential({ 
+                        valHash: pBSToData.$( own_policy ) 
+                    })
+                ).in( own_credentials =>
+                    outs.filter( out => 
+                        out.address.credential.eq( own_credentials )
                     )
                 )
             );
@@ -218,11 +202,13 @@ export const tempura
         .onMine( _ =>
             // forwards to validator
             passert.$(
-                tx.inputs.some( i =>
-                    i.resolved.address.credential.eq(
-                        PCredential.PScriptCredential({
-                            valHash: pBSToData.$( own_policy )
-                        })
+                plet(
+                    PCredential.PScriptCredential({
+                        valHash: pBSToData.$( own_policy )
+                    })
+                ).in( own_credentials => 
+                    tx.inputs.some( i =>
+                        i.resolved.address.credential.eq( own_credentials )
                     )
                 )
             )
@@ -350,37 +336,6 @@ export const tempura
             const inputHasMasterToken = value_contains_master.$( ownIn.value ).$( own_validator_hash );
             // ownIn.value.amountOf( own_validator_hash, master_tn ).eq( 1 );
 
-            const correctMint = plet(
-                pmatch(
-                    mint.find(({ fst: policy }) => policy.eq( own_validator_hash ))
-                )
-                .onJust(({ val }) => val.snd )
-                .onNothing( _ => perror( list( PAssetsEntry.type ) ) )
-            ).in( ownMints => {
-
-                // // inlined
-                // // Spend(4) requirement: Only one type of token minted under the validator policy
-                // const singleMintEntry = pisEmpty.$( ownMints.tail );
-
-                const { fst: ownMint_tn, snd: ownMint_qty } = ownMints.head;
-
-                const halving_exponent = plet( block_number.div( halving_number ) );
-
-                // inlined
-                const expected_quantity =
-                    pif( int ).$( halving_exponent.gt( 29 ) )
-                    .then( 0 )
-                    .else(
-                        initial_payout.div( exp2.$( halving_exponent ) )
-                    );
-
-                // inlined
-                // Spend(5) requirement: Minted token is the correct name and amount
-                const _correctMint = ownMint_tn.eq( tn ).and( ownMint_qty.eq( expected_quantity ) );
-
-                return ownMint_tn.eq( tn ).and( ownMint_qty.eq( expected_quantity ) );
-            })
-
             const ownMints = plet(
                 pmatch(
                     mint.find(({ fst: policy }) => policy.eq( own_validator_hash ))
@@ -393,21 +348,20 @@ export const tempura
             // Spend(4) requirement: Only one type of token minted under the validator policy
             const singleMintEntry = pisEmpty.$( ownMints.tail );
 
-            // const { fst: ownMint_tn, snd: ownMint_qty } = ownMints.head;
+            const { fst: ownMint_tn, snd: ownMint_qty } = ownMints.head;
+            const halving_exponent = plet( block_number.div( halving_number ) );
 
-            // const halving_exponent = plet( block_number.div( halving_number ) );
-
-            // // inlined
-            // const expected_quantity =
-            //     pif( int ).$( halving_exponent.gt( 29 ) )
-            //     .then( 0 )
-            //     .else(
-            //         initial_payout.div( exp2.$( halving_exponent ) )
-            //     );
+            // inlined
+            const expected_quantity =
+                pif( int ).$( halving_exponent.gt( 29 ) )
+                .then( 0 )
+                .else(
+                    initial_payout.div( exp2.$( halving_exponent ) )
+                );
             
-            // // inlined
-            // // Spend(5) requirement: Minted token is the correct name and amount
-            // const _correctMint = ownMint_tn.eq( tn ).and( ownMint_qty.eq( expected_quantity ) )
+            // inlined
+            // Spend(5) requirement: Minted token is the correct name and amount
+            const correctMint = ownMint_tn.eq( tn ).and( ownMint_qty.eq( expected_quantity ) )
 
             // inlined
             // Spend(6) requirement: Output has only master token and ada
@@ -491,10 +445,8 @@ export const tempura
                         accessConstIdx( outStateFields, 4 )
                     );
 
-                    const ptraceInt = ptraceVal( int );
-
                     return new_leading_zeros.eq( out_leading_zeros )
-                    .and( ptraceInt.$( new_difficulty ).eq( out_difficulty_number ) )
+                    .and( new_difficulty.eq( out_difficulty_number ) )
                     .and(
                         out_epoch_time.eq(
                             pif( int ).$(

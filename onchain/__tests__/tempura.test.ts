@@ -3,7 +3,7 @@ import { Redeemer, tempura } from "../tempura";
 
 describe("tempura", () => {
 
-    test("mine 0", () => {
+    test.only("mine 0", () => {
 
         const contract = tempura.$(
             PTxOutRef.fromData(
@@ -44,7 +44,7 @@ describe("tempura", () => {
         expect( res.result ).toEqual( UPLCConst.unit );
     });
 
-    test.only("mine 1", () => {
+    test("mine 1", () => {
 
         const contract = tempura.$(
             PTxOutRef.fromData(

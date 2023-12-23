@@ -37,8 +37,10 @@ void async function main()
         ).cborHex
     )
 
+    const network = process.argv[3] ?? cfg.network;
+
     const changeAddress = new Address(
-        cfg.network === "mainnet" ? "mainnet" : "testnet",
+        network === "mainnet" ? "mainnet" : "testnet",
         PaymentCredentials.pubKey( privateKey.derivePublicKey().hash )
     );
 
@@ -60,8 +62,6 @@ void async function main()
 
     const utxoRefData = utxoRef.toData();
     
-    const network = process.argv[3] ?? cfg.network;
-
     const envDir = `./${network}`;
     await withDir( envDir );
 
