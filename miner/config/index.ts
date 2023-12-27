@@ -8,19 +8,17 @@ import { Address, AddressStr, PaymentCredentials, PrivateKey } from "@harmonicla
 // export const OGMIOS_URL = process.env.OGMIOS_URL ?? "";
 // export const CHANGE_ADDRESS = process.env.CHANGE_ADDRESS ?? "";
 
-export type MinerConfig = {
+export interface MinerConfig {
     readonly network: "preview" | "mainnet",
     readonly blockfrost_api_key: string,
     readonly kupo_url: string,
+    readonly submit_url: string,
     readonly path_to_miner_private_key: string,
     readonly change_address?: string | null
 }
 
-export type ValidatedMinerConfig = {
-    readonly network: "preview" | "mainnet",
-    readonly blockfrost_api_key: string,
-    readonly kupo_url: string,
-    readonly path_to_miner_private_key: string,
+export interface ValidatedMinerConfig extends MinerConfig{
+    // overrides null
     readonly change_address: AddressStr,
     // only to keep track of the validation in the type
     // (`MinerConfig` not assignable to `ValidatedMinerConfig`)
@@ -69,10 +67,11 @@ export async function parseMinerConfig( path?: string ): Promise<MinerConfig>
             void dotenv_config(), // comma operator for side effects
             {
                 kupo_url: process.env.KUPO_URL ?? "",
+                submit_url: process.env.SUBMIT_URL ?? "",
                 path_to_miner_private_key: process.env.MINER_PRIVATE_KEY_PATH ?? "",
                 change_address: process.env.CHANGE_ADDRESS,
                 network: tryGetMinerNetworkFromEnv()
-            }
+            } as MinerConfig
         );
 
     if( typeof config.change_address !== "string" )
@@ -103,7 +102,9 @@ export function isValidMinerConfig( cfg: MinerConfig ): cfg is ValidatedMinerCon
         cfg.blockfrost_api_key.startsWith( cfg.network ) &&
         
         typeof cfg.kupo_url === "string" &&
-        cfg.kupo_url.startsWith("https://") &&
+        cfg.kupo_url.startsWith("http") &&
+
+        typeof cfg.submit_url === "string" &&
 
         isValidPath( cfg.path_to_miner_private_key ) &&
         existsSync( cfg.path_to_miner_private_key ) &&

@@ -1,12 +1,12 @@
 import { Address, AddressStr, CanResolveToUTxO, CostModelPlutusV1Array, CostModelPlutusV2Array, CostModels, Data, ExBudget, GenesisInfos, Hash28, Hash32, PaymentCredentials, ProtocolParamters, Script, StakeAddress, StakeAddressBech32, StakeCredentials, Tx, TxOutRef, UTxO, Value, ValueUnitEntry, dataFromCbor, isITxOutRef, isIUTxO } from "@harmoniclabs/plu-ts";
 import { fromHex, toHex } from "@harmoniclabs/uint8array-utils";
-// import { WebSocket } from "ws";
+import { WebSocket } from "ws";
 import { TxOutRef_fromString } from "../scripts/utils";
 
 export class KupmiosPluts
 {
     kupoUrl: string;
-    ogmiosUrl: string;
+    ogmiosUrl: string | undefined;
     readonly ogmiosWs!: WebSocket;
     readonly isOgmiosWsReady: boolean
 
@@ -17,36 +17,40 @@ export class KupmiosPluts
         this.ogmiosWs.close();
     }
 
-    constructor( kupoUrl: string, ogmiosUrl: string )
+    constructor( kupoUrl: string, ogmiosUrl: string | undefined )
     {
         this.kupoUrl = kupoUrl;
         this.ogmiosUrl = ogmiosUrl;
         let _ogmiosWs: WebSocket | undefined = undefined;
         let _isOgmiosReady = false;
 
-        // Object.defineProperty(
-        //     this, "ogmiosWs", {
-        //         get: () => {
-        //             if(!( _ogmiosWs instanceof WebSocket ))
-        //             {
-        //                 _ogmiosWs = new WebSocket( this.ogmiosUrl );
-        //                 _ogmiosWs.addEventListener("open", () => { _isOgmiosReady = true }, { once: true });
-        //             }
-        //             return _ogmiosWs;
-        //         },
-        //         set: () => {},
-        //         enumerable: true,
-        //         configurable: false
-        //     }
-        // );
-        // Object.defineProperty(
-        //     this, "isOgmiosWsReady", {
-        //         get: () => _isOgmiosReady,
-        //         set: () => {},
-        //         enumerable: true,
-        //         configurable: false
-        //     }
-        // );
+        if( typeof this.ogmiosUrl === "string" )
+        {
+            Object.defineProperty(
+                this, "ogmiosWs", {
+                    get: () => {
+                        if(!( _ogmiosWs instanceof WebSocket ))
+                        {
+                            _ogmiosWs = new WebSocket( this.ogmiosUrl as string );
+                            _ogmiosWs.addEventListener("open", () => { _isOgmiosReady = true }, { once: true });
+                            _isOgmiosReady = _isOgmiosReady || _ogmiosWs.readyState === WebSocket.OPEN;
+                        }
+                        return _ogmiosWs;
+                    },
+                    set: () => {},
+                    enumerable: true,
+                    configurable: false
+                }
+            );
+            Object.defineProperty(
+                this, "isOgmiosWsReady", {
+                    get: () => _isOgmiosReady,
+                    set: () => {},
+                    enumerable: true,
+                    configurable: false
+                }
+            );
+        }
     }
 
     async submitTx( tx: Tx ): Promise<Hash32>
@@ -102,10 +106,10 @@ export class KupmiosPluts
         const queryHashes = [...new Set(outRefs.map( outRef => outRef.id.toString() ))];
 
         const utxos = await Promise.all(queryHashes.map(async (txHash) => {
-            console.log( txHash );
             const result = await fetch(
                 `${this.kupoUrl}/matches/*@${txHash}?unspent`,
             ).then((res) => res.json());
+            if( !Array.isArray( result ) ) return [];
             return this.kupmiosUtxosToUtxos(result);
         }))
         .then( res => res.reduce( (acc, utxos) => acc.concat(utxos), [] ) );
@@ -224,9 +228,10 @@ export class KupmiosPluts
 
     async waitOgmiosReady(): Promise<void>
     {
+        this.ogmiosWs;
         while( !this.isOgmiosWsReady )
         {
-            await new Promise( r => setTimeout( r, 500 ) );
+            await new Promise( r => setTimeout( r, 1500 ) );
         }
     }
     async ogmiosCall(
@@ -310,6 +315,7 @@ export class KupmiosPluts
     }
 
     private async kupmiosUtxosToUtxos(utxos: any[]): Promise<UTxO[]> {
+        if( !Array.isArray( utxos ) ) return [];
         return Promise.all(
             utxos.map( async utxo => {
 

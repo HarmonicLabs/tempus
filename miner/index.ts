@@ -6,6 +6,7 @@ import { fromAscii, fromHex, toHex } from "@harmoniclabs/uint8array-utils";
 import { createHash, webcrypto } from "crypto";
 import { calculateDifficultyNumber, calculateInterlink, getDifficulty, getDifficultyAdjustement, incrementU8Array } from "./utils";
 import { BlockfrostPluts } from "@harmoniclabs/blockfrost-pluts";
+import { writeFileSync } from "node:fs";
 
 type GenesisFile = {
     validator: string,
@@ -48,12 +49,8 @@ async function main()
 
     const changeAddressIsMiner = changeAddress.toString() === minerAddress.toString();
 
-    const kupmios = new KupmiosPluts( cfg.kupo_url, "" /* cfg.ogmios_url */ );
+    const kupmios = new KupmiosPluts( cfg.kupo_url, undefined /* cfg.ogmios_url */ );
     process.once( "beforeExit", () => kupmios.close() );
-
-    const blockfrost = new BlockfrostPluts({
-        projectId: cfg.blockfrost_api_key
-    });
 
     const genesis: GenesisFile = JSON.parse(
         await readFile(
@@ -78,6 +75,10 @@ async function main()
 
     console.log(`looking for utxo at miner address (${minerAddress.toString()})...`);
     const minerUtxos = await kupmios.getUtxosAt( minerAddress );
+
+    const blockfrost = new BlockfrostPluts({
+        projectId: cfg.blockfrost_api_key
+    });
 
     console.log(`querying protocol parameters...`);
     const pps = await blockfrost.getProtocolParameters();
@@ -119,10 +120,9 @@ async function main()
             throw new Error(`${validatorMasterUtxo.utxoRef.toString()} was missing master token "itamae"`);
         }
     
-        let nonce = new Uint8Array( 16 );
-    
-        webcrypto.getRandomValues( nonce );
-
+        let nonce = fromHex("a41bf9f630b6910247112d2193c2e243");
+        // webcrypto.getRandomValues( nonce );
+        
         let targetState = dataToCbor(
             new DataConstr(
                 0,
@@ -259,12 +259,9 @@ async function main()
         let leading_zeros = (state.fields[2] as DataI).int;
 
         if (
-            (state.fields[0] as DataI).int % BigInt(2016) === BigInt(0) &&
-            (state.fields[0] as DataI).int > 0
+            (state.fields[0] as DataI).int % BigInt(2016) === BigInt(0)
         ) {
             const adjustment = getDifficultyAdjustement(epoch_time, BigInt(1_209_600_000) );
-    
-            epoch_time = BigInt(0);
     
             const new_difficulty = calculateDifficultyNumber(
                 {
@@ -282,6 +279,7 @@ async function main()
         const outDat = new DataConstr(
             0, 
             [
+                // block number
                 new DataI(
                     (state.fields[0] as DataI).int + BigInt(1)
                 ),
@@ -301,7 +299,7 @@ async function main()
             const outputs: ITxBuildOutput[] = [
                 {
                     address: validatorAddress,
-                    value: validatorMasterUtxo.resolved.value,
+                    value: Value.add( validatorMasterUtxo.resolved.value, Value.lovelaces( 1_000_000 ) ),
                     datum: outDat
                 }
             ];
@@ -326,6 +324,54 @@ async function main()
                 throw new Error("missing utxos at miner address; could not mint new block");
             }
 
+            const nonce_redeemer = new DataConstr( 1, [ new DataB( nonce ) ]);
+
+            writeFileSync("/home/michele/cardano/preview/cbors/nonce_redeemer.cbor",
+                dataToCbor( nonce_redeemer ).toBuffer()
+            );
+
+            // writeFileSync("/home/michele/cardano/preview/cbors/unit.cbor",
+            //     dataToCbor(
+            //         new DataConstr( 0, [] )
+            //     ).toBuffer()
+            // );
+
+            writeFileSync("/home/michele/cardano/preview/cbors/next_state_datum.cbor",
+                dataToCbor( outDat ).toBuffer()
+            );
+
+            const invalidBefore = txBuilder.posixToSlot( realTimeNow );
+            writeFileSync("/home/michele/cardano/preview/other_tx_infos/invalid_before.int.txt",
+                invalidBefore.toString(),
+                { encoding: "utf8" }
+            );
+
+            const invalidAfter = txBuilder.posixToSlot( realTimeNow + 180_000 );
+            writeFileSync("/home/michele/cardano/preview/other_tx_infos/invalid_after.int.txt",
+                invalidAfter.toString(),
+                { encoding: "utf8" }
+            );
+
+            writeFileSync("/home/michele/cardano/preview/other_tx_infos/contract_tx_in.txt",
+                validatorMasterUtxo.utxoRef.toString(),
+                { encoding: "utf-8" }
+            );
+
+            writeFileSync("/home/michele/cardano/preview/other_tx_infos/contract_ref_tx_in.txt",
+                deployedScriptRefUtxo.utxoRef.toString(),
+                { encoding: "utf-8" }
+            );
+
+            writeFileSync("/home/michele/cardano/preview/other_tx_infos/miner_tx_in.txt",
+                minerInput.utxoRef.toString(),
+                { encoding: "utf-8" }
+            );
+
+            writeFileSync("/home/michele/cardano/preview/other_tx_infos/mint_policy_id.txt",
+                validatorHash.toString(),
+                { encoding: "utf-8" }
+            );
+
             const tx = txBuilder.buildSync({
                 inputs: [
                     {
@@ -333,7 +379,7 @@ async function main()
                         referenceScriptV2: {
                             refUtxo: deployedScriptRefUtxo,
                             datum: "inline",
-                            redeemer: new DataConstr( 1, [ new DataB( nonce ) ])
+                            redeemer: nonce_redeemer
                         }
                     },
                     { utxo: minerInput }
@@ -350,37 +396,57 @@ async function main()
                     }
                 ],
                 outputs,
-                invalidBefore: txBuilder.posixToSlot( realTimeNow ),
-                invalidAfter: txBuilder.posixToSlot( realTimeNow + 180_000 ),
+                invalidBefore,
+                invalidAfter,
                 changeAddress: minerAddress
             });
 
             tx.signWith( minerPrivateKey );
 
-            await blockfrost.submitTx( tx );
+            console.log(
+                JSON.stringify(
+                    tx.toJson(),
+                    undefined,
+                    2
+                )
+            );
+
+            const txHashStr = await blockfrost.submitTx( tx );
+
+            // const res = await fetch(cfg.submit_url, {
+            //     method: "POST",
+            //     headers: {
+            //         "Content-Type": "application/cbor"
+            //     },
+            //     body: tx.toCbor().toBuffer()
+            // });
+            // if( !res.ok )
+            // {
+            //     console.error( res );
+            //     throw new Error( res.statusText );
+            // }
+
+            // const txHashStr = await res.text();
 
             console.log(
                 "found next block!" + 
                 "\ndatum: " + dataToCbor( outDat ) + 
-                ";\ntx hash: " + tx.hash.toString() + 
+                ";\ntx hash: " + txHashStr + 
                 "\n"
             );
 
-            minerUtxos.push(
-                ...tx.body.outputs
-                .map( (out, i) =>
-                    out.address.toString() === minerAddress.toString() ?
-                    new UTxO({
-                        utxoRef: {
-                            id: tx.hash.toString(),
-                            index: i
-                        },
-                        resolved: out
-                    }) : undefined
-                ).filter( out => out instanceof UTxO ) as UTxO[]
-            );
+            console.log("waiting tx confirmation")
+            const success = await kupmios.waitTxConfirmation( txHashStr );
 
-            await kupmios.waitTxConfirmation( tx.hash.toString() );
+            if( success )
+            {
+                console.log("ok");
+            }
+            else
+            {
+                console.log("timed out");
+                throw new Error("timed out");
+            }
 
             timer = -5001; // make sure we reset the validator next cycle
             consecutiveErrors = 0;

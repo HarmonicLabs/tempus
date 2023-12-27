@@ -15,8 +15,9 @@
         "buidl": "npm run build",
         "ci": "npm run test && npm run build",
         "start": "npm run build && node dist/miner/index.js mine",
-        "genesis": "npm run build && node dist/scripts/genesis.js",
+        "genesis": "npm run build && node dist/scripts/exec_genesis_w_logs.js",
         "mine": "npm run build && node dist/miner/index.js",
+        "writeStuff": "npm run build && node dist/scripts/writeStuff.local.js",
         "genPrivateKey": "npm run build && node dist/scripts/genPrivateKey.js"
     },
     "publishConfig": {
@@ -55,10 +56,10 @@
         "@harmoniclabs/cbor": "^1.1.2",
         "@harmoniclabs/crypto": "^0.1.0",
         "@harmoniclabs/obj-utils": "^1.0.0",
-        "@harmoniclabs/plu-ts": "^0.6.0-dev4",
+        "@harmoniclabs/plu-ts": "^0.6.0",
         "@harmoniclabs/uint8array-utils": "^1.0.0",
         "dotenv": "^16.3.1",
-        "ws": "^8.13.0"
+        "ws": "^8.15.1"
     },
     "devDependencies": {
         "@babel/preset-env": "^7.18.6",

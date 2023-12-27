@@ -1,4 +1,4 @@
-import { PAssetsEntry, PCredential, PData, PExtended, PScriptContext, PScriptPurpose, PTxInfo, PTxOut, PTxOutRef, PUnit, Term, TermFn, TermList, bool, bs, data, int, list, pBSToData, pDataI, pIntToData, pListToData, peqData, perror, pfn, phoist, pif, pisEmpty, plam, plet, pmakeUnit, pmatch, pnilData, pserialiseData, psha2_256, pstruct, psub, punBData, punIData, punsafeConvertType, str, unit } from "@harmoniclabs/plu-ts";
+import { PAssetsEntry, PCredential, PData, PExtended, PScriptContext, PScriptPurpose, PTxInfo, PTxOut, PTxOutRef, PUnit, Term, TermFn, TermList, bool, bs, data, int, list, pBSToData, pDataI, pIntToData, pListToData, peqData, perror, pfn, phoist, pif, pisEmpty, plam, plet, pmakeUnit, pmatch, pnilData, pserialiseData, psha2_256, pstruct, psub, ptrace, ptraceBool, ptraceError, ptraceInt, punBData, punIData, punsafeConvertType, str, unit } from "@harmoniclabs/plu-ts";
 import { epoch_number, exp2, format_found_bytearray, get_new_difficulty, get_difficulty_adjustment, halving_number, initial_payout, tn, value_contains_master, calculate_interlink } from "./tempus";
 
 
@@ -48,6 +48,15 @@ const passert = phoist(
         pif( unit ).$( condition )
         .then( pmakeUnit() )
         .else( perror( unit ) )
+    )
+);
+
+const passertOrTrace = phoist(
+    pfn([ str, bool ], unit )
+    (( msg, condition ) =>
+        pif( unit ).$( condition )
+        .then( pmakeUnit() )
+        .else( ptraceError( unit ).$( msg ) )
     )
 );
 
@@ -445,49 +454,60 @@ export const tempura
                         accessConstIdx( outStateFields, 4 )
                     );
 
-                    return new_leading_zeros.eq( out_leading_zeros )
-                    .and( new_difficulty.eq( out_difficulty_number ) )
-                    .and(
-                        out_epoch_time.eq(
-                            pif( int ).$(
-                                block_number.mod( epoch_number ).eq( 0 )
-                                .and( block_number.gt( 0 ) )
+                    // inlined
+                    const eq_leading_zeroes = (new_leading_zeros.eq( out_leading_zeros ) );
+
+                    // inlined
+                    const eq_new_diff = ( new_difficulty.eq( out_difficulty_number ) );
+
+                    // inlined
+                    const eq_epoch_time = (
+                        ptraceInt.$(out_epoch_time).eq(
+                            ptraceInt.$(
+                                pif( int ).$(
+                                    block_number.mod( epoch_number ).eq( 0 )
+                                    .and( block_number.gt( 0 ) )
+                                )
+                                .then( 0 )
+                                .else( new_epoch_time )
                             )
-                            .then( 0 )
-                            .else( new_epoch_time )
                         )
-                    );
+                    )
+
+                    return eq_leading_zeroes
+                    .and( eq_epoch_time )
+                    .and( eq_new_diff )
                 });
             });
 
-            return passert.$(
+            return passertOrTrace.$("fail").$(
                 // Spend(0) requirement: Contract has only one output going back to itself
-                singleOutToSelf
                 // Spend(1) requirement: Time range span is 3 minutes or less and inclusive
-                .and( timerangeIn3Mins )
                 // Spend(2) requirement: Found difficulty is less than or equal to the current difficulty
-                .and( meetsDifficulty )
                 // Spend(3) requirement: Input has master token
-                .and( inputHasMasterToken )
                 // Spend(4) requirement: Only one type of token minted under the validator policy
-                .and( singleMintEntry )
                 // Spend(5) requirement: Minted token is the correct name and amount
-                .and( correctMint )
                 // Spend(6) requirement: Output has only master token and ada
-                .and( outHasOnlyMaster )
                 // Spend(7) requirement: Expect Output Datum to be of type State
-                // (implicit: fails field extraction if it is not)
                 // Spend(8) requirement: Check output has correct difficulty number, leading zeros, and epoch time
-                .and( correctOutDatum )
+                // (implicit: fails field extraction if it is not)
                 // Spend(9) requirement: Output posix time is the averaged current time
-                .and( out_current_posix_time.eq( averaged_current_time ) )
                 // Spend(10) requirement: Output block number is the input block number + 1 
-                .and( out_block_number.eq( block_number.add( 1 ) ) )
                 // Spend(11) requirement: Output current hash is the target hash
-                .and( out_current_hash.eq( found_bytearray ) )
                 // Spend(12) requirement: Check output extra field is within a certain size
-                .and( pserialiseData.$( extra ).length.ltEq( 512 ) )
                 // Spend(13) requirement: Check output interlink is correct
+                ptrace( bool ).$("singleOutToSelf").$( singleOutToSelf )
+                .and( ptrace( bool ).$("timerangeIn3Mins").$( timerangeIn3Mins) )
+                .and( ptrace( bool ).$("meetsDifficulty").$( meetsDifficulty) )
+                .and( ptrace( bool ).$("inputHasMasterToken").$( inputHasMasterToken) )
+                .and( ptrace( bool ).$("singleMintEntry").$( singleMintEntry) )
+                .and( ptrace( bool ).$("correctMint").$( correctMint) )
+                .and( ptrace( bool ).$("outHasOnlyMaster").$( outHasOnlyMaster) )
+                .and( ptrace( bool ).$("correctOutDatum").$( correctOutDatum) )
+                .and( ptrace( bool ).$("out_current_posix_time").$( out_current_posix_time.eq( averaged_current_time )) )
+                .and( ptrace( bool ).$("out_block_number").$( out_block_number.eq( block_number.add( 1 ) )) )
+                .and( ptrace( bool ).$("out_current_hash").$( out_current_hash.eq( found_bytearray )) )
+                .and( ptrace( bool ).$("pserialiseData").$( pserialiseData.$( extra ).length.ltEq( 512 )) )
                 .and(
                     peqData
                     .$(
@@ -512,3 +532,7 @@ export const tempura
     )
     )
 );
+
+function ptraceValue(bool: [import("@harmoniclabs/plu-ts").PrimType.Bool]) {
+    throw new Error("Function not implemented.");
+}

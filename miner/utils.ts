@@ -125,21 +125,21 @@ export function getDifficultyAdjustement(
     else return { numerator: total_epoch_time, denominator: epoch_target };
 }
 
+const n16 = BigInt(16);
+const n62 = BigInt(62);
+const n4096 = BigInt(4096);
+const n0 = BigInt(0);
+const n65536 = BigInt(65536);
+const n65535 = BigInt(65535);
+
+const padding = n16;
+
 export function calculateDifficultyNumber(
     a: { leadingZeros: bigint; difficulty_number: bigint },
     numerator: bigint,
     denominator: bigint,
   ): { leadingZeros: bigint; difficulty_number: bigint }
 {
-    const n16 = BigInt(16);
-    const n62 = BigInt(62);
-    const n4096 = BigInt(4096);
-    const n0 = BigInt(0);
-    const n65536 = BigInt(65536);
-    const n65535 = BigInt(65535);
-
-    const padding = n16;
-
     const {
         difficulty_number: difficulty_num,
         leadingZeros: curr_leading_zeros
@@ -150,7 +150,7 @@ export function calculateDifficultyNumber(
 
     const new_difficulty = new_padded_difficulty / padding;
 
-    if( new_padded_difficulty / n65536 == n0 )
+    if( (new_padded_difficulty / n65536) == n0 )
     {
         if (curr_leading_zeros >= 62) {
             return { difficulty_number: n4096, leadingZeros: n62 };
@@ -161,25 +161,27 @@ export function calculateDifficultyNumber(
             };
         }   
     }
-    else if( new_difficulty / n65536 > n0 )
-    {
-        if( curr_leading_zeros <= 2 )
+    else {
+        if( new_difficulty / n65536 > n0 )
         {
-            return { difficulty_number: n65535, leadingZeros: BigInt(2) };
+            if( curr_leading_zeros <= 2 )
+            {
+                return { difficulty_number: n65535, leadingZeros: BigInt(2) };
+            }
+            else
+            {
+                return {
+                    difficulty_number: new_difficulty / padding,
+                    leadingZeros: curr_leading_zeros - BigInt(1),
+                };
+            }
         }
         else
         {
             return {
-                difficulty_number: new_difficulty / n16,
-                leadingZeros: curr_leading_zeros - BigInt(1),
+                difficulty_number: new_difficulty,
+                leadingZeros: curr_leading_zeros,
             };
         }
-    }
-    else
-    {
-        return {
-            difficulty_number: new_difficulty,
-            leadingZeros: curr_leading_zeros,
-        };
     }
 }  
